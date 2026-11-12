@@ -174,28 +174,31 @@ export class ArletexBackendServer {
         status: 'success',
       });
 
-      // 2. Load recent conversation history (sliding window of 6 messages to keep CPU prefill fast)
-      const rawHistory = this.messageRepo.listByConversation(conversationId, 6);
-      const history = rawHistory.map((m) => {
-        // Keep user prompt full, but truncate huge code blocks in past assistant turns to save prefill time
-        if (m.role === 'assistant' && m.content.length > 800) {
+      // 2. Load recent conversation history (sliding window of 8 recent messages)
+      const rawHistory = this.messageRepo.listRecentByConversation(conversationId, 8);
+      const history = rawHistory
+        .filter((m) => m.id !== userMsg.id)
+        .map((m) => {
+          // Keep user prompt full, but truncate huge code blocks in past assistant turns to save prefill time
+          if (m.role === 'assistant' && m.content.length > 800) {
+            return {
+              role: m.role as 'system' | 'user' | 'assistant',
+              content: m.content.slice(0, 800) + '\n...[prior output truncated for speed]...',
+            };
+          }
           return {
             role: m.role as 'system' | 'user' | 'assistant',
-            content: m.content.slice(0, 800) + '\n...[prior output truncated for speed]...',
+            content: m.content,
           };
-        }
-        return {
-          role: m.role as 'system' | 'user' | 'assistant',
-          content: m.content,
-        };
-      });
+        });
 
-      // 3. Assemble messages for LLM
+      // 3. Assemble messages for LLM: system prompt + recent history + current user prompt
       const systemPrompt = systemPromptOverride || DEFAULT_ARLE_SYSTEM_PROMPT;
 
       const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
         { role: 'system', content: systemPrompt },
         ...history,
+        { role: 'user', content: userMessageContent },
       ];
 
       // Emit instant heartbeat event so the UI immediately knows inference started

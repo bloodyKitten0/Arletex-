@@ -43,6 +43,43 @@ export class MessageRepository {
     }
   }
 
+  public listRecentByConversation(conversationId: string, limit = 10): Message[] {
+    try {
+      const stmt = this.db.prepare(`
+        SELECT id, conversation_id, role, content, token_count, created_at, metadata
+        FROM (
+          SELECT id, conversation_id, role, content, token_count, created_at, metadata
+          FROM messages
+          WHERE conversation_id = ?
+          ORDER BY created_at DESC
+          LIMIT ?
+        )
+        ORDER BY created_at ASC
+      `);
+      const rows = stmt.all(conversationId, limit) as Array<{
+        id: string;
+        conversation_id: string;
+        role: 'system' | 'user' | 'assistant';
+        content: string;
+        token_count: number | null;
+        created_at: string;
+        metadata: string;
+      }>;
+
+      return rows.map((r) => ({
+        id: r.id,
+        conversationId: r.conversation_id,
+        role: r.role,
+        content: r.content,
+        tokenCount: r.token_count,
+        createdAt: r.created_at,
+        metadata: JSON.parse(r.metadata || '{}'),
+      }));
+    } catch (err) {
+      throw new DatabaseError(`Failed to list recent messages for conversation ${conversationId}`, err);
+    }
+  }
+
   public create(input: CreateMessageInput & { tokenCount?: number | null }): Message {
     try {
       const id = crypto.randomUUID();
