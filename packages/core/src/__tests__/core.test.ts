@@ -10,7 +10,8 @@ describe('Core Package', () => {
       const config = createDefaultConfig();
       expect(config.dataDirectory).toBeDefined();
       expect(config.databasePath).toContain('arletex.sqlite');
-      expect(config.inference.serverUrl).toBe('http://127.0.0.1:8080');
+      expect(config.inference.provider).toBe('colibri');
+      expect(config.inference.serverUrl).toBe('http://127.0.0.1:8000');
       expect(config.inference.contextSize).toBe(8192);
       expect(config.logLevel).toBe('info');
     });

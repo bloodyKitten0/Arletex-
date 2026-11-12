@@ -48,22 +48,49 @@ Inference configuration can be defined via environment variables or updated dyna
 | Variable | Description | Default |
 |---|---|---|
 | `ARLETEX_INFERENCE_PROVIDER` | Active primary provider: `colibri` or `llama.cpp` | `colibri` |
-| `COLIBRI_SERVER_URL` | Colibri OpenAI-compatible HTTP daemon endpoint | `http://127.0.0.1:8080` |
-| `COLIBRI_MODEL_ID` | Model identifier passed to Colibri `/v1/chat/completions` | `colibri-default` |
+| `COLIBRI_SERVER_URL` | Colibri OpenAI-compatible HTTP daemon endpoint | `http://127.0.0.1:8000` |
+| `COLIBRI_MODEL_ID` | Model identifier passed to Colibri (`qwen3.6-colibri` or `qwen3-coder-30b-a3b-colibri`) | `qwen3.6-colibri` |
 | `LLAMA_SERVER_URL` | llama.cpp HTTP daemon endpoint | `http://127.0.0.1:8080` |
 | `LLAMA_MODEL_ID` | Model identifier passed to llama-server | `Qwen3.5-9B-Heretic-Q4_K_M` |
 | `ARLETEX_INFERENCE_FALLBACK` | Enable automatic failover to alternative provider if primary is offline (`true` / `false`) | `true` |
 
 ---
 
-## 3. Switching Providers
+## 3. Colibri Models & Launch Scripts
+
+Arletex is equipped to operate with two local Colibri MoE models:
+
+1. **Qwen3.6-35B-A3B** (General intelligence & conversation):
+   - Path: `/home/proof/colibri-models/qwen36-heretic-i4`
+   - Model ID: `qwen3.6-colibri`
+   - Start with: `./scripts/start-colibri-qwen36.sh`
+
+2. **Qwen3-Coder-30B-A3B Heretic** (Code, technical synthesis & development):
+   - Path: `/home/proof/colibri-models/qwen3-coder-heretic-gguf/Qwen3-Coder-30B-A3B-IT-Heretic.i1-Q4_K_M.colibri`
+   - Model ID: `qwen3-coder-30b-a3b-colibri`
+   - Start with: `./scripts/start-colibri-coder.sh`
+
+3. **Stop Colibri:**
+   - Run: `./scripts/stop-colibri.sh`
+
+---
+
+## 4. Switching Providers and Models
 
 ### Method A: Environment Variables (Launch Time)
-To run Arletex using Colibri on port 5000:
+To run Arletex using Colibri with Qwen3.6-35B:
 ```bash
 export ARLETEX_INFERENCE_PROVIDER=colibri
-export COLIBRI_SERVER_URL=http://127.0.0.1:5000
-export COLIBRI_MODEL_ID=colibri-9b
+export COLIBRI_SERVER_URL=http://127.0.0.1:8000
+export COLIBRI_MODEL_ID=qwen3.6-colibri
+pnpm start
+```
+
+To run Arletex using Colibri with Qwen3-Coder-30B:
+```bash
+export ARLETEX_INFERENCE_PROVIDER=colibri
+export COLIBRI_SERVER_URL=http://127.0.0.1:8000
+export COLIBRI_MODEL_ID=qwen3-coder-30b-a3b-colibri
 pnpm start
 ```
 
@@ -82,18 +109,18 @@ Arletex exposes a local configuration endpoint on loopback:
 curl http://127.0.0.1:39281/api/inference/config
 ```
 
-**Switch active provider dynamically to llama.cpp:**
+**Switch active model to Qwen3-Coder-30B on Colibri:**
 ```bash
 curl -X POST http://127.0.0.1:39281/api/inference/config \
   -H "Content-Type: application/json" \
-  -d '{"provider": "llama.cpp", "defaultModelId": "Qwen3.5-9B-Heretic-Q4_K_M"}'
+  -d '{"provider": "colibri", "serverUrl": "http://127.0.0.1:8000", "defaultModelId": "qwen3-coder-30b-a3b-colibri"}'
 ```
 
-**Switch active provider back to Colibri:**
+**Switch active provider dynamically to llama.cpp fallback:**
 ```bash
 curl -X POST http://127.0.0.1:39281/api/inference/config \
   -H "Content-Type: application/json" \
-  -d '{"provider": "colibri", "serverUrl": "http://127.0.0.1:8080", "defaultModelId": "colibri-v1"}'
+  -d '{"provider": "llama.cpp", "serverUrl": "http://127.0.0.1:8080", "defaultModelId": "Qwen3.5-9B-Heretic-Q4_K_M"}'
 ```
 
 ---

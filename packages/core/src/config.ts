@@ -30,12 +30,12 @@ export function createDefaultConfig(overrides?: AppConfigOverrides): AppConfig {
   // Primary URL & model resolution based on provider
   const defaultServerUrl =
     activeProvider === 'colibri'
-      ? process.env['COLIBRI_SERVER_URL'] ?? 'http://127.0.0.1:8080'
+      ? process.env['COLIBRI_SERVER_URL'] ?? 'http://127.0.0.1:8000'
       : process.env['LLAMA_SERVER_URL'] ?? 'http://127.0.0.1:8080';
 
   const defaultModelId =
     activeProvider === 'colibri'
-      ? process.env['COLIBRI_MODEL_ID'] ?? 'colibri-default'
+      ? process.env['COLIBRI_MODEL_ID'] ?? 'qwen3.6-colibri'
       : process.env['LLAMA_MODEL_ID'] ?? 'Qwen3.5-9B-Heretic-Q4_K_M';
 
   const fallbackEnabled =

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-COLIBRI_URL="${1:-http://127.0.0.1:8080}"
-MODEL_ID="${2:-colibri-default}"
+COLIBRI_URL="${1:-http://127.0.0.1:8000}"
+MODEL_ID="${2:-qwen3.6-colibri}"
 
 echo "=========================================================="
 echo " Testing Colibri Local Inference Connection"

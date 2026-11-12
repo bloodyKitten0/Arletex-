@@ -84,8 +84,8 @@ export type InferenceProviderType = z.infer<typeof InferenceProviderTypeSchema>;
 
 export const InferenceConfigSchema = z.object({
   provider: InferenceProviderTypeSchema.default('colibri'),
-  serverUrl: z.string().url().default('http://127.0.0.1:8080'),
-  defaultModelId: z.string().default('colibri-default'),
+  serverUrl: z.string().url().default('http://127.0.0.1:8000'),
+  defaultModelId: z.string().default('qwen3.6-colibri'),
   temperature: z.number().min(0).max(2).default(0.7),
   topP: z.number().min(0).max(1).default(0.9),
   maxTokens: z.number().int().positive().default(2048),

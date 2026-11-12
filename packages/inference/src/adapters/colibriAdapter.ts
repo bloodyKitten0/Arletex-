@@ -14,6 +14,7 @@ export class ColibriAdapter implements IInferenceProvider {
 
   private config: InferenceConfig;
   private readonly logger: ILogger;
+  private discoveredModelId: string | null = null;
 
   constructor(config: Partial<InferenceConfig> = {}, logger: ILogger = rootLogger) {
     this.config = InferenceConfigSchema.parse({
@@ -55,6 +56,7 @@ export class ColibriAdapter implements IInferenceProvider {
             const data = (await response.json()) as { data?: Array<{ id: string }> };
             if (data.data && data.data.length > 0 && data.data[0]) {
               modelLoaded = data.data[0].id;
+              this.discoveredModelId = modelLoaded;
             }
           } catch {}
         } else {
@@ -117,8 +119,11 @@ export class ColibriAdapter implements IInferenceProvider {
 
     this.logger.info(`[Colibri] Starting stream inference request ${requestId} to ${endpoint}`);
 
+    const effectiveModelId =
+      this.discoveredModelId || effectiveConfig.defaultModelId || 'qwen3.6-colibri';
+
     const payload = {
-      model: effectiveConfig.defaultModelId,
+      model: effectiveModelId,
       messages,
       temperature: effectiveConfig.temperature,
       top_p: effectiveConfig.topP,
