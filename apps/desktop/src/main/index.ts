@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { fork, ChildProcess, execSync } from 'node:child_process';
 import {
@@ -202,68 +203,102 @@ function registerIpcHandlers() {
   ipcMain.handle(
     IPC_CHANNELS.INFERENCE_STREAM_START,
     async (event, input: StartInferenceStreamInput) => {
-      // Launch the stream reader as a detached async task
+      // Launch the stream reader as a detached async task using native http.request
+      // to avoid undici 300s BodyTimeoutError during long CPU MoE generations
       const streamTask = async () => {
         try {
-          const response = await fetch(`http://127.0.0.1:${backendPort}/api/inference/stream`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Accept: 'text/event-stream',
+          const reqBody = JSON.stringify(input);
+          const req = http.request(
+            {
+              hostname: '127.0.0.1',
+              port: backendPort,
+              path: '/api/inference/stream',
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Accept: 'text/event-stream',
+                'Content-Length': Buffer.byteLength(reqBody),
+              },
             },
-            body: JSON.stringify(input),
+            (res) => {
+              if (res.statusCode && res.statusCode >= 400) {
+                let errText = '';
+                res.on('data', (d) => (errText += d.toString()));
+                res.on('end', () => {
+                  if (!event.sender.isDestroyed()) {
+                    event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, {
+                      requestId: crypto.randomUUID(),
+                      conversationId: input.conversationId,
+                      delta: '',
+                      fullContent: '',
+                      isDone: true,
+                      finishReason: 'error',
+                      error: `Inference failed: ${errText || res.statusMessage}`,
+                    } as StreamChunk);
+                  }
+                });
+                return;
+              }
+
+              let buffer = '';
+              res.setEncoding('utf8');
+              res.on('data', (chunkStr: string) => {
+                buffer += chunkStr;
+                const lines = buffer.split('\n\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                  const trimmed = line.trim();
+                  if (trimmed.startsWith('data: ')) {
+                    const jsonStr = trimmed.slice(6);
+                    try {
+                      const chunk = JSON.parse(jsonStr) as StreamChunk;
+                      if (!event.sender.isDestroyed()) {
+                        event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, chunk);
+                      }
+                    } catch (e) {
+                      logger.warn('Failed to parse SSE line from backend', e);
+                    }
+                  }
+                }
+              });
+
+              res.on('error', (err) => {
+                logger.error('Backend response stream error', err);
+                if (!event.sender.isDestroyed()) {
+                  event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, {
+                    requestId: crypto.randomUUID(),
+                    conversationId: input.conversationId,
+                    delta: '',
+                    fullContent: '',
+                    isDone: true,
+                    finishReason: 'error',
+                    error: err.message,
+                  } as StreamChunk);
+                }
+              });
+            },
+          );
+
+          req.on('error', (err) => {
+            logger.error('Error connecting to backend inference stream', err);
+            if (!event.sender.isDestroyed()) {
+              event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, {
+                requestId: crypto.randomUUID(),
+                conversationId: input.conversationId,
+                delta: '',
+                fullContent: '',
+                isDone: true,
+                finishReason: 'error',
+                error: err.message,
+              } as StreamChunk);
+            }
           });
 
-          if (!response.ok || !response.body) {
-            const err = await response.text();
-            event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, {
-              requestId: crypto.randomUUID(),
-              conversationId: input.conversationId,
-              delta: '',
-              fullContent: '',
-              isDone: true,
-              finishReason: 'error',
-              error: `Inference failed: ${err}`,
-            } as StreamChunk);
-            return;
-          }
-
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n\n');
-            buffer = lines.pop() || '';
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (trimmed.startsWith('data: ')) {
-                const jsonStr = trimmed.slice(6);
-                try {
-                  const chunk = JSON.parse(jsonStr) as StreamChunk;
-                  event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, chunk);
-                } catch (e) {
-                  logger.warn('Failed to parse SSE line from backend', e);
-                }
-              }
-            }
-          }
+          req.write(reqBody);
+          req.end();
         } catch (err: any) {
-          logger.error('Error streaming inference from backend', err);
-          event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, {
-            requestId: crypto.randomUUID(),
-            conversationId: input.conversationId,
-            delta: '',
-            fullContent: '',
-            isDone: true,
-            finishReason: 'error',
-            error: err.message || 'Stream failed',
-          } as StreamChunk);
+          logger.error('Error initiating stream task', err);
         }
       };
 

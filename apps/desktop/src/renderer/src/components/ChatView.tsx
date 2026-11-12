@@ -208,8 +208,32 @@ export const ChatView: React.FC<ChatViewProps> = ({
           </div>
 
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-            Loading attention weights & computing prompt representation on local engine...
+            {generationStats.elapsedSeconds > 15
+              ? 'CPU MoE expert weights streaming from NVMe SSD (~0.4 t/s). Evaluating deep multi-turn context...'
+              : 'Loading attention weights & computing prompt representation on local engine...'}
           </div>
+
+          {generationStats.elapsedSeconds > 8 && (
+            <div
+              style={{
+                fontSize: '11px',
+                color: 'var(--accent)',
+                backgroundColor: 'rgba(0, 255, 170, 0.08)',
+                padding: '6px 10px',
+                borderRadius: '4px',
+                border: '1px solid rgba(0, 255, 170, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                lineHeight: '1.4',
+              }}
+            >
+              <Zap size={13} style={{ flexShrink: 0 }} />
+              <span>
+                Tip: For instant (~4s) answers on GPU, click <strong>⚡ Fast Mode (9B Vulkan)</strong> in the top bar.
+              </span>
+            </div>
+          )}
 
           {/* Pulse progress bar */}
           <div

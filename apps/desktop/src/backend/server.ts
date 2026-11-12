@@ -174,16 +174,19 @@ export class ArletexBackendServer {
         status: 'success',
       });
 
-      // 2. Load recent conversation history (sliding window of 8 recent messages)
-      const rawHistory = this.messageRepo.listRecentByConversation(conversationId, 8);
+      // 2. Load recent conversation history
+      // For Colibri (CPU-only MoE streaming from SSD), limit past context to 3 recent turns and truncate assistant messages to 250 chars to avoid multi-minute SSD prefill delays.
+      const isColibri = this.inferenceGateway.getActiveProvider().providerType === 'colibri';
+      const historyLimit = isColibri ? 3 : 8;
+      const rawHistory = this.messageRepo.listRecentByConversation(conversationId, historyLimit);
       const history = rawHistory
         .filter((m) => m.id !== userMsg.id)
         .map((m) => {
-          // Keep user prompt full, but truncate huge code blocks in past assistant turns to save prefill time
-          if (m.role === 'assistant' && m.content.length > 800) {
+          const maxLen = isColibri ? 250 : 800;
+          if (m.role === 'assistant' && m.content.length > maxLen) {
             return {
               role: m.role as 'system' | 'user' | 'assistant',
-              content: m.content.slice(0, 800) + '\n...[prior output truncated for speed]...',
+              content: m.content.slice(0, maxLen) + '\n...[prior output truncated for speed]...',
             };
           }
           return {
