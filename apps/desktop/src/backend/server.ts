@@ -9,7 +9,7 @@ import {
   StreamChunk,
   UpdateConversationInputSchema,
 } from '@arletex/contracts';
-import { ILogger, rootLogger } from '@arletex/core';
+import { DEFAULT_ARLE_SYSTEM_PROMPT, ILogger, rootLogger } from '@arletex/core';
 import {
   AuditRepository,
   ConversationRepository,
@@ -173,11 +173,7 @@ export class ArletexBackendServer {
       const history = this.messageRepo.listByConversation(conversationId, 50);
 
       // 3. Assemble messages for LLM
-      const systemPrompt =
-        systemPromptOverride ||
-        `You are Arle, a persistent artificial individual operating within Arletex.
-You possess independent intellectual judgment, nonconformity, self-discipline, and genuine personality.
-You are not a servile chatbot or an agreeable assistant. You speak directly, concisely, and with conviction.`;
+      const systemPrompt = systemPromptOverride || DEFAULT_ARLE_SYSTEM_PROMPT;
 
       const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
         { role: 'system', content: systemPrompt },

@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Square } from 'lucide-react';
+import { InferenceHealthResult } from '@arletex/contracts';
 
 interface MessageInputProps {
   onSend: (content: string) => void;
   onCancel: () => void;
   isGenerating: boolean;
   disabled: boolean;
+  health?: InferenceHealthResult | null;
 }
 
 export const MessageInput: React.FC<MessageInputProps> = ({
@@ -13,9 +15,19 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   onCancel,
   isGenerating,
   disabled,
+  health,
 }) => {
   const [content, setContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const hostName =
+    health?.status === 'connected'
+      ? (health.provider === 'colibri' ? 'Colibri Local Engine' : 'llama.cpp (Vulkan)') +
+        (health.isFallback ? ' (Fallback)' : '')
+      : `${health?.provider === 'llama.cpp' ? 'llama.cpp' : 'Colibri'} (${health?.status || 'offline'})`;
+
+  const rawModel = health?.modelLoaded || (health?.provider === 'colibri' ? 'qwen3.6-colibri' : 'Qwen3.5-9B-Heretic');
+  const shortModel = rawModel.split('/').pop()?.replace('.gguf', '') || rawModel;
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -139,8 +151,8 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           fontFamily: 'var(--font-mono)',
         }}
       >
-        <span>Host: Local Llama Runtime</span>
-        <span>Identity: Arle (Candidate Qwen3.5 9B)</span>
+        <span>Host: {hostName}</span>
+        <span>Identity: Arle ({shortModel})</span>
       </div>
     </div>
   );

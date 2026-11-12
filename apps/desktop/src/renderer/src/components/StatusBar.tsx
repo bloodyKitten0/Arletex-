@@ -64,7 +64,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({ health, checking, onRefres
         {/* Server URL */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <Server size={13} style={{ color: 'var(--text-muted)' }} />
-          <span>{health?.url || 'http://127.0.0.1:8080'}</span>
+          <span>{health?.url || (health?.provider === 'llama.cpp' ? 'http://127.0.0.1:8080' : 'http://127.0.0.1:8000')}</span>
         </div>
 
         {/* Model loaded */}

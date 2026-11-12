@@ -96,7 +96,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               Arle Prototype Session
             </div>
             <div style={{ fontSize: '13px', marginTop: '4px' }}>
-              Send a message to initiate local cognition. Responses are streamed directly from llama-server.
+              Send a message to initiate local cognition. Responses are streamed directly from your configured inference provider.
             </div>
           </div>
         </div>

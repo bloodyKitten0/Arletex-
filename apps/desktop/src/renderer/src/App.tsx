@@ -79,7 +79,7 @@ export const App: React.FC = () => {
         setHealth({
           status: 'error',
           provider: 'colibri',
-          url: 'http://127.0.0.1:8080',
+          url: 'http://127.0.0.1:8000',
           latencyMs: null,
           modelLoaded: null,
           error: res.error,
@@ -90,7 +90,7 @@ export const App: React.FC = () => {
       setHealth({
         status: 'disconnected',
         provider: 'colibri',
-        url: 'http://127.0.0.1:8080',
+        url: 'http://127.0.0.1:8000',
         latencyMs: null,
         modelLoaded: null,
         error: err.message,
@@ -286,6 +286,7 @@ export const App: React.FC = () => {
           onCancel={handleCancelGeneration}
           isGenerating={isGenerating}
           disabled={isGenerating}
+          health={health}
         />
       </main>
     </div>
