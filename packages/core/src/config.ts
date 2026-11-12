@@ -65,6 +65,21 @@ export function createDefaultConfig(overrides?: AppConfigOverrides): AppConfig {
         overrides?.inference?.fallbackModelId ??
         process.env['LLAMA_MODEL_ID'] ??
         'Qwen3.5-9B-Heretic-Q4_K_M',
+      specialistCoding: {
+        enabled:
+          overrides?.inference?.specialistCoding?.enabled ??
+          (process.env['SPECIALIST_CODING_ENABLED'] ? process.env['SPECIALIST_CODING_ENABLED'] !== 'false' : true),
+        serverUrl:
+          overrides?.inference?.specialistCoding?.serverUrl ??
+          process.env['SPECIALIST_CODING_URL'] ??
+          'http://127.0.0.1:8001',
+        modelId:
+          overrides?.inference?.specialistCoding?.modelId ??
+          process.env['SPECIALIST_CODING_MODEL'] ??
+          'qwen3-coder-30b-a3b-colibri',
+        temperature: overrides?.inference?.specialistCoding?.temperature ?? 0.2,
+        maxTokens: overrides?.inference?.specialistCoding?.maxTokens ?? 4096,
+      },
     },
   };
 

@@ -22,7 +22,11 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   const hostName =
     health?.status === 'connected'
-      ? (health.provider === 'colibri' ? 'Colibri Local Engine' : 'llama.cpp (Vulkan)') +
+      ? (health.provider === 'colibri'
+          ? (health.specialistCoding?.status === 'connected'
+              ? 'Colibri (35B Central + 30B Coder)'
+              : 'Colibri Local Engine')
+          : 'llama.cpp (Vulkan)') +
         (health.isFallback ? ' (Fallback)' : '')
       : `${health?.provider === 'llama.cpp' ? 'llama.cpp' : 'Colibri'} (${health?.status || 'offline'})`;
 

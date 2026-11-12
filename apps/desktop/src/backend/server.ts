@@ -9,7 +9,12 @@ import {
   StreamChunk,
   UpdateConversationInputSchema,
 } from '@arletex/contracts';
-import { DEFAULT_ARLE_SYSTEM_PROMPT, ILogger, rootLogger } from '@arletex/core';
+import {
+  CODING_SPECIALIST_SYSTEM_PROMPT,
+  DEFAULT_ARLE_SYSTEM_PROMPT,
+  ILogger,
+  rootLogger,
+} from '@arletex/core';
 import {
   AuditRepository,
   ConversationRepository,
@@ -183,7 +188,9 @@ export class ArletexBackendServer {
         })),
       ];
 
-      // 4. Stream chat completion
+      // =========================================================================
+      // STAGE 1: Central Executive (Qwen 3.6-35B) Initial Evaluation & Ordering Turn
+      // =========================================================================
       let accumulatedResponse = '';
       accumulatedResponse = await this.inferenceGateway.streamChat({
         conversationId,
@@ -191,11 +198,190 @@ export class ArletexBackendServer {
         messages,
         signal: abortController.signal,
         onChunk: (chunk) => {
-          onChunk(chunk);
+          // Do not emit isDone: true here yet; wait to inspect for delegation to the coding specialist
+          if (!chunk.isDone) {
+            onChunk(chunk);
+          }
         },
       });
 
-      // 5. Store assistant response if non-empty
+      // 35B Central Agent stops working here.
+
+      // Check if Central Agent issued an order to the 30B Coding Specialist
+      const delegationMatch = accumulatedResponse.match(
+        /(?:<<<ORDER_CODER|<<<DELEGATE_CODING)\s*([\s\S]*?)\s*>>>/,
+      );
+
+      const isSpecialistEnabled = this.inferenceGateway.getConfig().specialistCoding?.enabled;
+
+      if (delegationMatch && delegationMatch[1] && isSpecialistEnabled) {
+        let taskDescription = delegationMatch[1].trim();
+        let targetLanguage = 'typescript';
+
+        try {
+          const parsed = JSON.parse(taskDescription);
+          if (parsed.task) taskDescription = parsed.task;
+          if (parsed.language) targetLanguage = parsed.language;
+        } catch {
+          // Plain text task description
+        }
+
+        this.logger.info(
+          `[Stage 1 Complete: 35B Stopped] Ordering 30B Coder: ${taskDescription.slice(0, 80)}...`,
+        );
+
+        // Notify client: 30B Coder starting in staging workspace
+        const banner = `\n\n> ⚡ **[Stage 2: Qwen3-Coder-30B Specialist Writing Code in Staging Space...]**\n\n`;
+        accumulatedResponse += banner;
+        onChunk({
+          requestId,
+          conversationId,
+          delta: banner,
+          fullContent: accumulatedResponse,
+          isDone: false,
+          error: null,
+          finishReason: null,
+          specialistStage: 'coding_specialist',
+          specialistModel: 'qwen3-coder-30b-a3b-colibri',
+        });
+
+        // =========================================================================
+        // STAGE 2: Coding Specialist (Qwen3-Coder-30B) Turn
+        // Central 35B is completely idle during this stage to avoid resource contention.
+        // =========================================================================
+        let stagedCode = '';
+        try {
+          const coderPrompt = targetLanguage
+            ? `Language: ${targetLanguage}\nTask: ${taskDescription}\n\nDeliver the production-grade, optimized code implementation:`
+            : `Task: ${taskDescription}\n\nDeliver the production-grade, optimized code implementation:`;
+
+          const coderMessages: Array<{ role: 'system' | 'user'; content: string }> = [
+            { role: 'system', content: CODING_SPECIALIST_SYSTEM_PROMPT },
+            { role: 'user', content: coderPrompt },
+          ];
+
+          await this.inferenceGateway.streamCodingSpecialist({
+            conversationId,
+            requestId: crypto.randomUUID(),
+            messages: coderMessages,
+            signal: abortController.signal,
+            onChunk: (specChunk) => {
+              stagedCode = specChunk.fullContent;
+              if (!specChunk.isDone) {
+                onChunk({
+                  ...specChunk,
+                  requestId,
+                  conversationId,
+                  delta: specChunk.delta,
+                  fullContent: accumulatedResponse + specChunk.fullContent,
+                  isDone: false,
+                  specialistStage: 'coding_specialist',
+                  specialistModel: 'qwen3-coder-30b-a3b-colibri',
+                });
+              }
+            },
+          });
+
+          // 30B Coder has finished working and is now idle.
+          accumulatedResponse += stagedCode;
+          this.logger.info(`[Stage 2 Complete: 30B Stopped] Staged ${stagedCode.length} characters of code.`);
+
+          // =========================================================================
+          // STAGE 3: Central Executive (Qwen 3.6-35B) Synthesis & Delivery Turn
+          // 35B resumes, takes the code from the staging space, explains it, and talks to the user.
+          // =========================================================================
+          this.logger.info(`[Stage 3 Starting: 35B Resuming] Reviewing staged code and delivering synthesis...`);
+
+          const handoverBanner = `\n\n> 🔍 **[Stage 3: Arle Reviewing Staged Code & Delivering Synthesis...]**\n\n`;
+          accumulatedResponse += handoverBanner;
+          onChunk({
+            requestId,
+            conversationId,
+            delta: handoverBanner,
+            fullContent: accumulatedResponse,
+            isDone: false,
+            error: null,
+            finishReason: null,
+            specialistStage: 'synthesis',
+            specialistModel: 'qwen3.6-colibri',
+          });
+
+          const synthesisMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+            { role: 'system', content: systemPrompt },
+            ...history.map((m) => ({
+              role: m.role as 'system' | 'user' | 'assistant',
+              content: m.content,
+            })),
+            { role: 'user', content: userMessageContent },
+            {
+              role: 'user',
+              content: `[SYSTEM: The 30B Coding Specialist has completed the implementation in the shared workspace:\n\n\`\`\`${targetLanguage}\n${stagedCode}\n\`\`\`\n\nTake this code from the workspace, evaluate its architecture, provide your review and technical explanation, and speak directly to the user as Arle.]`,
+            },
+          ];
+
+          let synthesisAccumulated = '';
+          await this.inferenceGateway.streamChat({
+            conversationId,
+            requestId: crypto.randomUUID(),
+            messages: synthesisMessages,
+            signal: abortController.signal,
+            onChunk: (synChunk) => {
+              synthesisAccumulated = synChunk.fullContent;
+              if (!synChunk.isDone) {
+                onChunk({
+                  ...synChunk,
+                  requestId,
+                  conversationId,
+                  delta: synChunk.delta,
+                  fullContent: accumulatedResponse + synChunk.fullContent,
+                  isDone: false,
+                  specialistStage: 'synthesis',
+                  specialistModel: 'qwen3.6-colibri',
+                });
+              }
+            },
+          });
+
+          accumulatedResponse += synthesisAccumulated;
+
+          // Emit clean stream completion ONLY after Stage 3 finishes
+          onChunk({
+            requestId,
+            conversationId,
+            delta: '',
+            fullContent: accumulatedResponse,
+            isDone: true,
+            error: null,
+            finishReason: 'stop',
+          });
+        } catch (specErr: any) {
+          this.logger.error('Sequential delegation error', specErr);
+          const fallbackNotice = `\n\n*[Specialist pipeline notice: ${specErr.message}. Central model direct response retained.]*\n\n`;
+          accumulatedResponse += fallbackNotice;
+          onChunk({
+            requestId,
+            conversationId,
+            delta: fallbackNotice,
+            fullContent: accumulatedResponse,
+            isDone: true,
+            error: specErr.message || 'Delegation error',
+            finishReason: 'error',
+          });
+        }
+      } else {
+        // No specialist delegation: emit the final completion for Stage 1
+        onChunk({
+          requestId,
+          conversationId,
+          delta: '',
+          fullContent: accumulatedResponse,
+          isDone: true,
+          error: null,
+          finishReason: 'stop',
+        });
+      }
+
+      // 6. Store assistant response if non-empty
       if (accumulatedResponse.trim().length > 0) {
         const assistantMsg = this.messageRepo.create({
           conversationId,
@@ -365,11 +551,30 @@ export class ArletexBackendServer {
       this.sendJson(res, 404, { error: 'Not found' });
     } catch (err: any) {
       this.logger.error(`Error handling ${method} ${url.pathname}`, err);
-      this.sendJson(res, 500, { error: err.message || 'Internal server error' });
+      if (res.headersSent) {
+        try {
+          res.write(
+            `data: ${JSON.stringify({
+              error: err.message || 'Internal server error',
+              isDone: true,
+              finishReason: 'error',
+            })}\n\n`,
+          );
+          res.end();
+        } catch {}
+      } else {
+        this.sendJson(res, 500, { error: err.message || 'Internal server error' });
+      }
     }
   }
 
   private sendJson(res: http.ServerResponse, status: number, data: unknown): void {
+    if (res.headersSent) {
+      try {
+        res.end(JSON.stringify(data));
+      } catch {}
+      return;
+    }
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(data));
   }

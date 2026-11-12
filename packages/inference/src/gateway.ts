@@ -17,6 +17,7 @@ export class InferenceGateway implements IInferenceProvider {
   private readonly logger: ILogger;
   private readonly colibriAdapter: ColibriAdapter;
   private readonly llamaAdapter: LlamaServerAdapter;
+  private readonly codingSpecialistAdapter: ColibriAdapter;
 
   constructor(config: Partial<InferenceConfig> = {}, logger: ILogger = rootLogger) {
     this.config = InferenceConfigSchema.parse(config);
@@ -42,6 +43,19 @@ export class InferenceGateway implements IInferenceProvider {
       },
       logger,
     );
+
+    // Coding Specialist Engine (Heretic Qwen3-Coder-30B)
+    this.codingSpecialistAdapter = new ColibriAdapter(
+      {
+        ...this.config,
+        provider: 'colibri',
+        serverUrl: this.config.specialistCoding.serverUrl,
+        defaultModelId: this.config.specialistCoding.modelId,
+        temperature: this.config.specialistCoding.temperature,
+        maxTokens: this.config.specialistCoding.maxTokens,
+      },
+      logger.child('CodingSpecialist'),
+    );
   }
 
   public getActiveProvider(): IInferenceProvider {
@@ -50,6 +64,10 @@ export class InferenceGateway implements IInferenceProvider {
 
   public getFallbackProvider(): IInferenceProvider {
     return this.config.provider === 'colibri' ? this.llamaAdapter : this.colibriAdapter;
+  }
+
+  public getCodingSpecialistAdapter(): ColibriAdapter {
+    return this.codingSpecialistAdapter;
   }
 
   public updateConfig(newConfig: Partial<InferenceConfig>): void {
@@ -67,6 +85,15 @@ export class InferenceGateway implements IInferenceProvider {
       defaultModelId: isLlamaPrimary ? this.config.defaultModelId : this.config.fallbackModelId,
     });
 
+    this.codingSpecialistAdapter.updateConfig({
+      ...this.config,
+      provider: 'colibri',
+      serverUrl: this.config.specialistCoding.serverUrl,
+      defaultModelId: this.config.specialistCoding.modelId,
+      temperature: this.config.specialistCoding.temperature,
+      maxTokens: this.config.specialistCoding.maxTokens,
+    });
+
     this.logger.info(`InferenceGateway updated. Active provider: ${this.config.provider}, fallbackEnabled: ${this.config.fallbackEnabled}`);
   }
 
@@ -78,8 +105,33 @@ export class InferenceGateway implements IInferenceProvider {
     const primary = this.getActiveProvider();
     const primaryHealth = await primary.checkHealth();
 
+    // Check coding specialist if enabled
+    let specialistCodingHealth: InferenceHealthResult['specialistCoding'] = undefined;
+    if (this.config.specialistCoding.enabled) {
+      try {
+        const specHealth = await this.codingSpecialistAdapter.checkHealth();
+        specialistCodingHealth = {
+          status: specHealth.status,
+          url: specHealth.url,
+          modelLoaded: specHealth.modelLoaded,
+          latencyMs: specHealth.latencyMs,
+        };
+      } catch (err: any) {
+        specialistCodingHealth = {
+          status: 'error',
+          url: this.config.specialistCoding.serverUrl,
+          modelLoaded: null,
+          latencyMs: null,
+        };
+      }
+    }
+
     if (primaryHealth.status === 'connected') {
-      return { ...primaryHealth, isFallback: false };
+      return {
+        ...primaryHealth,
+        isFallback: false,
+        specialistCoding: specialistCodingHealth,
+      };
     }
 
     // Check if fallback is eligible
@@ -93,11 +145,23 @@ export class InferenceGateway implements IInferenceProvider {
           ...fallbackHealth,
           isFallback: true,
           error: `Primary (${primary.providerType}) offline: ${primaryHealth.error}. Using fallback.`,
+          specialistCoding: specialistCodingHealth,
         };
       }
     }
 
-    return { ...primaryHealth, isFallback: false };
+    return {
+      ...primaryHealth,
+      isFallback: false,
+      specialistCoding: specialistCodingHealth,
+    };
+  }
+
+  public async streamCodingSpecialist(options: ChatStreamOptions): Promise<string> {
+    if (!this.config.specialistCoding.enabled) {
+      throw new Error('Coding specialist is not enabled in configuration');
+    }
+    return await this.codingSpecialistAdapter.streamChat(options);
   }
 
   public async streamChat(options: ChatStreamOptions): Promise<string> {

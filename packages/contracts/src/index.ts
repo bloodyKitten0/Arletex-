@@ -82,6 +82,17 @@ export type CreateMessageInput = z.infer<typeof CreateMessageInputSchema>;
 export const InferenceProviderTypeSchema = z.enum(['colibri', 'llama.cpp']);
 export type InferenceProviderType = z.infer<typeof InferenceProviderTypeSchema>;
 
+// Specialist Model Configurations
+export const SpecialistCodingConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  serverUrl: z.string().url().default('http://127.0.0.1:8001'),
+  modelId: z.string().default('qwen3-coder-30b-a3b-colibri'),
+  temperature: z.number().min(0).max(2).default(0.2),
+  maxTokens: z.number().int().positive().default(4096),
+});
+
+export type SpecialistCodingConfig = z.infer<typeof SpecialistCodingConfigSchema>;
+
 export const InferenceConfigSchema = z.object({
   provider: InferenceProviderTypeSchema.default('colibri'),
   serverUrl: z.string().url().default('http://127.0.0.1:8000'),
@@ -91,6 +102,15 @@ export const InferenceConfigSchema = z.object({
   maxTokens: z.number().int().positive().default(2048),
   stopSequences: z.array(z.string()).default([]),
   contextSize: z.number().int().positive().default(8192),
+
+  // Specialist Coding Delegation
+  specialistCoding: SpecialistCodingConfigSchema.default({
+    enabled: true,
+    serverUrl: 'http://127.0.0.1:8001',
+    modelId: 'qwen3-coder-30b-a3b-colibri',
+    temperature: 0.2,
+    maxTokens: 4096,
+  }),
 
   // Fallback resilience
   fallbackEnabled: z.boolean().default(true),
@@ -112,6 +132,14 @@ export const InferenceHealthResultSchema = z.object({
   modelLoaded: z.string().nullable(),
   error: z.string().nullable(),
   isFallback: z.boolean().default(false),
+  specialistCoding: z
+    .object({
+      status: ServerHealthStatusSchema,
+      url: z.string(),
+      modelLoaded: z.string().nullable(),
+      latencyMs: z.number().nullable(),
+    })
+    .optional(),
 });
 
 export type InferenceHealthResult = z.infer<typeof InferenceHealthResultSchema>;
@@ -135,6 +163,8 @@ export const StreamChunkSchema = z.object({
   isDone: z.boolean(),
   error: z.string().nullable().default(null),
   finishReason: z.string().nullable().default(null),
+  specialistStage: z.enum(['central', 'coding_specialist', 'synthesis']).optional(),
+  specialistModel: z.string().optional(),
   usage: z
     .object({
       promptTokens: z.number().optional(),

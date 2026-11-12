@@ -82,6 +82,41 @@ export const StatusBar: React.FC<StatusBarProps> = ({ health, checking, onRefres
             <span>{health.latencyMs}ms</span>
           </div>
         )}
+
+        {/* Coding Specialist Status */}
+        {health?.specialistCoding && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              borderLeft: '1px solid var(--border-subtle)',
+              paddingLeft: '12px',
+            }}
+          >
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor:
+                  health.specialistCoding.status === 'connected' ? 'var(--success)' : 'var(--text-muted)',
+                boxShadow:
+                  health.specialistCoding.status === 'connected' ? '0 0 6px var(--success)' : 'none',
+                display: 'inline-block',
+              }}
+            />
+            <span
+              style={{
+                color:
+                  health.specialistCoding.status === 'connected' ? 'var(--accent)' : 'var(--text-muted)',
+                fontWeight: health.specialistCoding.status === 'connected' ? 500 : 400,
+              }}
+            >
+              Coder 30B: {health.specialistCoding.status === 'connected' ? 'Ready' : 'Offline'}
+            </span>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
