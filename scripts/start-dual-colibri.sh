@@ -32,6 +32,7 @@ echo "Starting Central Agent (Qwen 3.6-35B) on port $PORT_CENTRAL..."
   --port "$PORT_CENTRAL" \
   --auto-tier \
   --no-think \
+  --ctx 4096 \
   --queue-timeout 1800 \
   --max-queue 16 &
 
@@ -46,6 +47,7 @@ echo "Starting Coding Specialist (Qwen3-Coder-30B) on port $PORT_CODER..."
   --port "$PORT_CODER" \
   --auto-tier \
   --no-think \
+  --ctx 4096 \
   --queue-timeout 1800 \
   --max-queue 16 &
 

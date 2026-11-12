@@ -210,3 +210,6 @@ Configuration options can be customized via environment variables:
 | `LLAMA_MODEL_ID` | Active model identifier | `Qwen3.5-9B-Heretic-Q4_K_M` |
 | `ARLETEX_LOG_LEVEL` | Console log verbosity (`debug`, `info`, `warn`, `error`) | `info` |
 | `ARLETEX_PORT` | Internal backend service port | `39281` |
+
+
+**Note: files in drafts folder are the core of building**

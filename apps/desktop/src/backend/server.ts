@@ -174,19 +174,42 @@ export class ArletexBackendServer {
         status: 'success',
       });
 
-      // 2. Load conversation history from database
-      const history = this.messageRepo.listByConversation(conversationId, 50);
+      // 2. Load recent conversation history (sliding window of 6 messages to keep CPU prefill fast)
+      const rawHistory = this.messageRepo.listByConversation(conversationId, 6);
+      const history = rawHistory.map((m) => {
+        // Keep user prompt full, but truncate huge code blocks in past assistant turns to save prefill time
+        if (m.role === 'assistant' && m.content.length > 800) {
+          return {
+            role: m.role as 'system' | 'user' | 'assistant',
+            content: m.content.slice(0, 800) + '\n...[prior output truncated for speed]...',
+          };
+        }
+        return {
+          role: m.role as 'system' | 'user' | 'assistant',
+          content: m.content,
+        };
+      });
 
       // 3. Assemble messages for LLM
       const systemPrompt = systemPromptOverride || DEFAULT_ARLE_SYSTEM_PROMPT;
 
       const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
         { role: 'system', content: systemPrompt },
-        ...history.map((m) => ({
-          role: m.role as 'system' | 'user' | 'assistant',
-          content: m.content,
-        })),
+        ...history,
       ];
+
+      // Emit instant heartbeat event so the UI immediately knows inference started
+      onChunk({
+        requestId,
+        conversationId,
+        delta: '',
+        fullContent: '',
+        isDone: false,
+        error: null,
+        finishReason: null,
+        specialistStage: 'central',
+        specialistModel: 'qwen3.6-colibri',
+      });
 
       // =========================================================================
       // STAGE 1: Central Executive (Qwen 3.6-35B) Initial Evaluation & Ordering Turn

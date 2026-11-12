@@ -1,14 +1,22 @@
 import React from 'react';
 import { InferenceHealthResult } from '@arletex/contracts';
-import { Activity, RefreshCw, Cpu, Server } from 'lucide-react';
+import { Activity, RefreshCw, Cpu, Server, Zap } from 'lucide-react';
 
 interface StatusBarProps {
   health: InferenceHealthResult | null;
   checking: boolean;
   onRefresh: () => void;
+  speedTps?: number;
+  isGenerating?: boolean;
 }
 
-export const StatusBar: React.FC<StatusBarProps> = ({ health, checking, onRefresh }) => {
+export const StatusBar: React.FC<StatusBarProps> = ({
+  health,
+  checking,
+  onRefresh,
+  speedTps = 0,
+  isGenerating = false,
+}) => {
   const isConnected = health?.status === 'connected';
   const providerName = health?.provider === 'llama.cpp' ? 'LLAMA-SERVER' : 'COLIBRI';
   const statusLabel = isConnected
@@ -117,6 +125,38 @@ export const StatusBar: React.FC<StatusBarProps> = ({ health, checking, onRefres
             </span>
           </div>
         )}
+
+        {/* Live Generation Speed / TPS Gauge */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            borderLeft: '1px solid var(--border-subtle)',
+            paddingLeft: '12px',
+          }}
+        >
+          <Zap
+            size={13}
+            style={{
+              color: isGenerating ? 'var(--accent)' : 'var(--text-muted)',
+              filter: isGenerating ? 'drop-shadow(0 0 4px var(--accent))' : 'none',
+            }}
+          />
+          <span
+            style={{
+              fontWeight: 600,
+              fontFamily: 'var(--font-mono)',
+              color: isGenerating && speedTps > 0 ? 'var(--accent)' : 'var(--text-secondary)',
+            }}
+          >
+            {isGenerating
+              ? speedTps > 0
+                ? `${speedTps} t/s`
+                : 'evaluating...'
+              : '0.0 t/s'}
+          </span>
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

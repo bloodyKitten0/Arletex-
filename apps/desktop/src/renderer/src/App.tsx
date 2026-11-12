@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Conversation, InferenceHealthResult, Message, StreamChunk } from '@arletex/contracts';
 import { Sidebar } from './components/Sidebar';
 import { StatusBar } from './components/StatusBar';
-import { ChatView } from './components/ChatView';
+import { ChatView, GenerationStats } from './components/ChatView';
 import { MessageInput } from './components/MessageInput';
 import { ArletexApi } from '../../preload';
 
@@ -21,6 +21,15 @@ export const App: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  const [generationStats, setGenerationStats] = useState<GenerationStats>({
+    startTime: null,
+    firstTokenTime: null,
+    tokenCount: 0,
+    tokensPerSecond: 0,
+    elapsedSeconds: 0,
+    stage: 'thinking',
+  });
 
   const activeRequestIdRef = useRef<string | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
@@ -125,6 +134,29 @@ export const App: React.FC = () => {
     }
   }, [activeConversationId, loadMessages]);
 
+  // Live timer for generation stats
+  useEffect(() => {
+    if (!isGenerating || !generationStats.startTime) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const elapsed = Math.max(0.1, (now - generationStats.startTime!) / 1000);
+      setGenerationStats((prev) => {
+        const decodeSeconds = prev.firstTokenTime
+          ? Math.max(0.1, (now - prev.firstTokenTime) / 1000)
+          : null;
+        const tps = decodeSeconds && prev.tokenCount > 0
+          ? prev.tokenCount / decodeSeconds
+          : 0;
+        return {
+          ...prev,
+          elapsedSeconds: parseFloat(elapsed.toFixed(1)),
+          tokensPerSecond: parseFloat(tps.toFixed(1)),
+        };
+      });
+    }, 100);
+    return () => clearInterval(interval);
+  }, [isGenerating, generationStats.startTime]);
+
   // Listen to streaming chunks from Electron preload IPC
   useEffect(() => {
     if (!api) return;
@@ -146,6 +178,29 @@ export const App: React.FC = () => {
           void loadMessages(targetId);
         }
         return;
+      }
+
+      // Update live generation stats on token arrival
+      if (chunk.delta) {
+        setGenerationStats((prev) => {
+          const now = Date.now();
+          const firstToken = prev.firstTokenTime ?? now;
+          const newTokens = prev.tokenCount + 1;
+          const decodeSeconds = Math.max(0.1, (now - firstToken) / 1000);
+          const tps = newTokens / decodeSeconds;
+          return {
+            ...prev,
+            firstTokenTime: firstToken,
+            tokenCount: newTokens,
+            tokensPerSecond: parseFloat(tps.toFixed(1)),
+            stage: chunk.specialistStage || prev.stage,
+          };
+        });
+      } else if (chunk.specialistStage) {
+        setGenerationStats((prev) => ({
+          ...prev,
+          stage: chunk.specialistStage || prev.stage,
+        }));
       }
 
       if (chunk.fullContent || chunk.fullReasoning) {
@@ -229,6 +284,15 @@ export const App: React.FC = () => {
     setStreamingText('');
     setError(null);
 
+    setGenerationStats({
+      startTime: Date.now(),
+      firstTokenTime: null,
+      tokenCount: 0,
+      tokensPerSecond: 0,
+      elapsedSeconds: 0,
+      stage: 'thinking',
+    });
+
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
 
@@ -271,7 +335,13 @@ export const App: React.FC = () => {
       />
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
-        <StatusBar health={health} checking={checkingHealth} onRefresh={() => void checkHealth()} />
+        <StatusBar
+          health={health}
+          checking={checkingHealth}
+          onRefresh={() => void checkHealth()}
+          speedTps={generationStats.tokensPerSecond}
+          isGenerating={isGenerating}
+        />
 
         <ChatView
           messages={messages}
@@ -279,6 +349,7 @@ export const App: React.FC = () => {
           isGenerating={isGenerating}
           error={error}
           onClearError={() => setError(null)}
+          generationStats={generationStats}
         />
 
         <MessageInput
