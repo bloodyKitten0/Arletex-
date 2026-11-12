@@ -1,0 +1,38 @@
+{
+  "name": "@arletex/desktop",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/main/index.js",
+  "scripts": {
+    "build": "pnpm run build:renderer && pnpm run build:backend && pnpm run build:main && pnpm run build:preload",
+    "build:renderer": "vite build",
+    "build:backend": "esbuild src/backend/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/backend/index.js",
+    "build:main": "esbuild src/main/index.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/main/index.js",
+    "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload/index.cjs",
+    "typecheck": "tsc --noEmit",
+    "dev": "vite",
+    "start": "pnpm run build && electron ."
+  },
+  "dependencies": {
+    "@arletex/contracts": "workspace:*",
+    "@arletex/core": "workspace:*",
+    "@arletex/database": "workspace:*",
+    "@arletex/inference": "workspace:*",
+    "better-sqlite3": "^13.0.3",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.13.1",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^34.2.0",
+    "esbuild": "^0.25.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  }
+}
