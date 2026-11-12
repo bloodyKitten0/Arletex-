@@ -324,6 +324,19 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleToggleProvider = async (targetProvider: 'colibri' | 'llama.cpp') => {
+    if (!api) return;
+    try {
+      setCheckingHealth(true);
+      await api.updateInferenceConfig({ provider: targetProvider });
+      await checkHealth();
+    } catch (err: any) {
+      setError(`Failed to switch provider: ${err.message}`);
+    } finally {
+      setCheckingHealth(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <Sidebar
@@ -341,6 +354,7 @@ export const App: React.FC = () => {
           onRefresh={() => void checkHealth()}
           speedTps={generationStats.tokensPerSecond}
           isGenerating={isGenerating}
+          onToggleProvider={handleToggleProvider}
         />
 
         <ChatView

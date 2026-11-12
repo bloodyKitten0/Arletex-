@@ -184,6 +184,11 @@ function registerIpcHandlers() {
     return callBackend('/api/inference/health');
   });
 
+  // Inference Configuration Update
+  ipcMain.handle(IPC_CHANNELS.CONFIG_UPDATE, async (_, config) => {
+    return callBackend('/api/inference/config', 'POST', config);
+  });
+
   // Cancel Stream
   ipcMain.handle(IPC_CHANNELS.INFERENCE_STREAM_CANCEL, async (_, requestId: string) => {
     return callBackend('/api/inference/cancel', 'POST', { requestId });

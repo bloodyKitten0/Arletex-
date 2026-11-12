@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import {
   Conversation,
+  InferenceConfig,
   InferenceHealthResult,
   IPC_CHANNELS,
   IPCResponse,
@@ -17,6 +18,7 @@ export interface ArletexApi {
   deleteConversation: (id: string) => Promise<IPCResponse<boolean>>;
   listMessages: (conversationId: string) => Promise<IPCResponse<Message[]>>;
   checkInferenceHealth: () => Promise<IPCResponse<InferenceHealthResult>>;
+  updateInferenceConfig: (config: Partial<InferenceConfig>) => Promise<IPCResponse<InferenceConfig>>;
   startInferenceStream: (input: StartInferenceStreamInput) => Promise<IPCResponse<null>>;
   cancelInference: (requestId: string) => Promise<IPCResponse<{ cancelled: boolean }>>;
   onStreamChunk: (callback: (chunk: StreamChunk) => void) => () => void;
@@ -30,6 +32,7 @@ const api: ArletexApi = {
   deleteConversation: (id) => ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_DELETE, id),
   listMessages: (conversationId) => ipcRenderer.invoke(IPC_CHANNELS.MESSAGES_LIST, conversationId),
   checkInferenceHealth: () => ipcRenderer.invoke(IPC_CHANNELS.INFERENCE_HEALTH),
+  updateInferenceConfig: (config) => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_UPDATE, config),
   startInferenceStream: (input) => ipcRenderer.invoke(IPC_CHANNELS.INFERENCE_STREAM_START, input),
   cancelInference: (requestId) => ipcRenderer.invoke(IPC_CHANNELS.INFERENCE_STREAM_CANCEL, requestId),
   onStreamChunk: (callback: (chunk: StreamChunk) => void) => {
