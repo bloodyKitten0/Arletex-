@@ -125,6 +125,7 @@ export class ColibriAdapter implements IInferenceProvider {
       max_tokens: effectiveConfig.maxTokens,
       stream: true,
       stop: effectiveConfig.stopSequences.length > 0 ? effectiveConfig.stopSequences : undefined,
+      chat_template_kwargs: { enable_thinking: false },
     };
 
     let response: Response;
@@ -186,11 +187,12 @@ export class ColibriAdapter implements IInferenceProvider {
     const emitDone = (finishReason = 'stop') => {
       if (!isDoneEmitted) {
         isDoneEmitted = true;
+        const text = fullContent || fullReasoning;
         onChunk({
           requestId,
           conversationId,
           delta: '',
-          fullContent: fullContent || fullReasoning,
+          fullContent: text,
           fullReasoning,
           isDone: true,
           finishReason: lastFinishReason || finishReason,
@@ -229,7 +231,7 @@ export class ColibriAdapter implements IInferenceProvider {
               conversationId,
               delta,
               reasoningDelta,
-              fullContent: fullContent || (delta ? fullContent : ''),
+              fullContent: fullContent || fullReasoning,
               fullReasoning,
               isDone: false,
               finishReason: null,
@@ -269,7 +271,7 @@ export class ColibriAdapter implements IInferenceProvider {
             error: null,
           });
         }
-        return fullContent;
+        return fullContent || fullReasoning;
       }
       this.logger.error('[Colibri] Error while reading stream chunks', err);
       if (!isDoneEmitted) {
@@ -278,7 +280,7 @@ export class ColibriAdapter implements IInferenceProvider {
           requestId,
           conversationId,
           delta: '',
-          fullContent,
+          fullContent: fullContent || fullReasoning,
           fullReasoning,
           isDone: true,
           finishReason: 'error',
@@ -288,6 +290,6 @@ export class ColibriAdapter implements IInferenceProvider {
       throw err;
     }
 
-    return fullContent;
+    return fullContent || fullReasoning;
   }
 }

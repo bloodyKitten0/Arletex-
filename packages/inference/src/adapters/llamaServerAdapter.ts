@@ -113,6 +113,7 @@ export class LlamaServerAdapter implements IInferenceProvider {
       max_tokens: effectiveConfig.maxTokens,
       stream: true,
       stop: effectiveConfig.stopSequences.length > 0 ? effectiveConfig.stopSequences : undefined,
+      chat_template_kwargs: { enable_thinking: false },
     };
 
     let response: Response;
@@ -174,11 +175,12 @@ export class LlamaServerAdapter implements IInferenceProvider {
     const emitDone = (finishReason = 'stop') => {
       if (!isDoneEmitted) {
         isDoneEmitted = true;
+        const text = fullContent || fullReasoning;
         onChunk({
           requestId,
           conversationId,
           delta: '',
-          fullContent: fullContent || fullReasoning,
+          fullContent: text,
           fullReasoning,
           isDone: true,
           finishReason: lastFinishReason || finishReason,
@@ -217,7 +219,7 @@ export class LlamaServerAdapter implements IInferenceProvider {
               conversationId,
               delta,
               reasoningDelta,
-              fullContent: fullContent || (delta ? fullContent : ''),
+              fullContent: fullContent || fullReasoning,
               fullReasoning,
               isDone: false,
               finishReason: null,
@@ -250,14 +252,14 @@ export class LlamaServerAdapter implements IInferenceProvider {
             requestId,
             conversationId,
             delta: '',
-            fullContent,
+            fullContent: fullContent || fullReasoning,
             fullReasoning,
             isDone: true,
             finishReason: 'cancelled',
             error: null,
           });
         }
-        return fullContent;
+        return fullContent || fullReasoning;
       }
       this.logger.error('[Llama] Error while reading stream chunks', err);
       if (!isDoneEmitted) {
@@ -266,7 +268,7 @@ export class LlamaServerAdapter implements IInferenceProvider {
           requestId,
           conversationId,
           delta: '',
-          fullContent,
+          fullContent: fullContent || fullReasoning,
           fullReasoning,
           isDone: true,
           finishReason: 'error',
@@ -276,6 +278,6 @@ export class LlamaServerAdapter implements IInferenceProvider {
       throw err;
     }
 
-    return fullContent;
+    return fullContent || fullReasoning;
   }
 }

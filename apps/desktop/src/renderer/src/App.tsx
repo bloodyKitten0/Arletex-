@@ -148,8 +148,8 @@ export const App: React.FC = () => {
         return;
       }
 
-      if (chunk.fullContent) {
-        setStreamingText(chunk.fullContent);
+      if (chunk.fullContent || chunk.fullReasoning) {
+        setStreamingText(chunk.fullContent || chunk.fullReasoning || '');
       }
     });
 
