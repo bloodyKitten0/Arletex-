@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@12.18.0",
   "scripts": {
+    "arle": "./scripts/run-arletex.sh",
     "build": "pnpm --filter \"@arletex/*\" run build",
     "typecheck": "pnpm --filter \"@arletex/*\" run typecheck",
     "test": "vitest run",
