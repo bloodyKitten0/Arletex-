@@ -34,8 +34,16 @@ echo " Offload:   Vulkan (ngl: $N_GPU_LAYERS)"
 echo " Threads:   $THREADS"
 echo "=========================================================="
 
+MMPROJ_PATH="${MMPROJ_PATH:-/home/proof/models/qwen-heretic/Qwen3.5-9B-mmproj-BF16.gguf}"
+EXTRA_ARGS=()
+if [ -f "$MMPROJ_PATH" ]; then
+  echo " Multimodal: $MMPROJ_PATH"
+  EXTRA_ARGS+=(--mmproj "$MMPROJ_PATH")
+fi
+
 exec "$LLAMA_SERVER" \
   -m "$MODEL_PATH" \
+  "${EXTRA_ARGS[@]}" \
   --host "$HOST" \
   --port "$PORT" \
   -c "$CTX_SIZE" \

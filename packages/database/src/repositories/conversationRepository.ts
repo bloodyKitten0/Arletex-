@@ -10,17 +10,18 @@ export class ConversationRepository {
     this.db = db;
   }
 
-  public list(limit = 50, offset = 0): Conversation[] {
+  public list(limit = 100, offset = 0): Conversation[] {
     try {
       const stmt = this.db.prepare(`
-        SELECT id, title, created_at, updated_at, metadata
+        SELECT id, title, is_pinned, created_at, updated_at, metadata
         FROM conversations
-        ORDER BY updated_at DESC
+        ORDER BY is_pinned DESC, updated_at DESC
         LIMIT ? OFFSET ?
       `);
       const rows = stmt.all(limit, offset) as Array<{
         id: string;
         title: string;
+        is_pinned: number;
         created_at: string;
         updated_at: string;
         metadata: string;
@@ -29,6 +30,7 @@ export class ConversationRepository {
       return rows.map((r) => ({
         id: r.id,
         title: r.title,
+        isPinned: Boolean(r.is_pinned),
         createdAt: r.created_at,
         updatedAt: r.updated_at,
         metadata: JSON.parse(r.metadata || '{}'),
@@ -41,7 +43,7 @@ export class ConversationRepository {
   public getById(id: string): Conversation | null {
     try {
       const stmt = this.db.prepare(`
-        SELECT id, title, created_at, updated_at, metadata
+        SELECT id, title, is_pinned, created_at, updated_at, metadata
         FROM conversations
         WHERE id = ?
       `);
@@ -49,6 +51,7 @@ export class ConversationRepository {
         | {
             id: string;
             title: string;
+            is_pinned: number;
             created_at: string;
             updated_at: string;
             metadata: string;
@@ -60,6 +63,7 @@ export class ConversationRepository {
       return {
         id: row.id,
         title: row.title,
+        isPinned: Boolean(row.is_pinned),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         metadata: JSON.parse(row.metadata || '{}'),
@@ -74,17 +78,20 @@ export class ConversationRepository {
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       const metadataStr = JSON.stringify(input.metadata || {});
+      const title = input.title || 'New Conversation';
+      const isPinned = input.isPinned ? 1 : 0;
 
       const stmt = this.db.prepare(`
-        INSERT INTO conversations (id, title, created_at, updated_at, metadata)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO conversations (id, title, is_pinned, created_at, updated_at, metadata)
+        VALUES (?, ?, ?, ?, ?, ?)
       `);
 
-      stmt.run(id, input.title, now, now, metadataStr);
+      stmt.run(id, title, isPinned, now, now, metadataStr);
 
       return {
         id,
-        title: input.title,
+        title,
+        isPinned: Boolean(isPinned),
         createdAt: now,
         updatedAt: now,
         metadata: input.metadata || {},
@@ -102,20 +109,22 @@ export class ConversationRepository {
       }
 
       const title = input.title ?? existing.title;
+      const isPinned = input.isPinned !== undefined ? (input.isPinned ? 1 : 0) : (existing.isPinned ? 1 : 0);
       const metadata = input.metadata ? { ...existing.metadata, ...input.metadata } : existing.metadata;
       const now = new Date().toISOString();
 
       const stmt = this.db.prepare(`
         UPDATE conversations
-        SET title = ?, metadata = ?, updated_at = ?
+        SET title = ?, is_pinned = ?, metadata = ?, updated_at = ?
         WHERE id = ?
       `);
 
-      stmt.run(title, JSON.stringify(metadata), now, input.id);
+      stmt.run(title, isPinned, JSON.stringify(metadata), now, input.id);
 
       return {
         id: input.id,
         title,
+        isPinned: Boolean(isPinned),
         createdAt: existing.createdAt,
         updatedAt: now,
         metadata,

@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { fork, ChildProcess, execSync } from 'node:child_process';
 import {
@@ -15,11 +16,12 @@ import { rootLogger } from '@arletex/core';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const logger = rootLogger.child('MainProcess');
+const logger = rootLogger.child('ElectronMain');
 
 let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcess | null = null;
 let backendPort = 39281;
+let backendAuthToken = '';
 
 function findSystemNode(): string {
   if (process.env['NODE_BINARY'] && fs.existsSync(process.env['NODE_BINARY'])) {
@@ -41,7 +43,6 @@ function findSystemNode(): string {
 }
 
 function getBackendScriptPath(): string {
-  // In development/production, points to dist/backend/index.js
   return path.join(__dirname, '../backend/index.js');
 }
 
@@ -51,10 +52,17 @@ async function startBackendService(): Promise<number> {
     const nodeBinary = findSystemNode();
     logger.info(`Starting backend service: ${backendScript} using node: ${nodeBinary}`);
 
+    backendAuthToken = crypto.randomBytes(32).toString('hex');
+    let hasResolved = false;
+
     backendProcess = fork(backendScript, [], {
       execPath: nodeBinary,
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-      env: { ...process.env, ARLETEX_PORT: '39281' },
+      env: {
+        ...process.env,
+        ARLETEX_PORT: '39281',
+        ARLETEX_AUTH_TOKEN: backendAuthToken,
+      },
     });
 
     backendProcess.stdout?.on('data', (data) => {
@@ -65,36 +73,61 @@ async function startBackendService(): Promise<number> {
       logger.error(`[Backend stderr] ${data.toString().trim()}`);
     });
 
-    backendProcess.on('message', (msg: any) => {
+    backendProcess.on('message', async (msg: any) => {
       if (msg && msg.type === 'ready') {
         backendPort = msg.port;
-        logger.info(`Backend service ready on port ${backendPort}`);
-        resolve(backendPort);
+        logger.info(`Backend reported ready on port ${backendPort}. Verifying health...`);
+        try {
+          const res = await fetch(`http://127.0.0.1:${backendPort}/health`);
+          if (res.ok) {
+            hasResolved = true;
+            logger.info(`Backend service verified healthy on 127.0.0.1:${backendPort}`);
+            resolve(backendPort);
+          } else {
+            throw new Error(`Health check returned status ${res.status}`);
+          }
+        } catch (healthErr: any) {
+          logger.error('Backend health check failed', healthErr);
+          if (!hasResolved) {
+            hasResolved = true;
+            reject(new Error(`Backend health check failed: ${healthErr.message}`));
+          }
+        }
       }
     });
 
     backendProcess.on('error', (err) => {
       logger.error('Failed to spawn backend process', err);
-      reject(err);
+      if (!hasResolved) {
+        hasResolved = true;
+        reject(err);
+      }
     });
 
     backendProcess.on('exit', (code, signal) => {
       logger.warn(`Backend process exited with code ${code}, signal ${signal}`);
+      if (!hasResolved) {
+        hasResolved = true;
+        reject(new Error(`Backend exited unexpectedly with code ${code}`));
+      }
     });
 
     // Timeout safety
     setTimeout(() => {
-      resolve(backendPort);
-    }, 4000);
+      if (!hasResolved) {
+        hasResolved = true;
+        reject(new Error('Backend process timed out waiting for readiness signal'));
+      }
+    }, 10000);
   });
 }
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1240,
-    height: 840,
-    minWidth: 900,
-    minHeight: 600,
+    width: 1360,
+    height: 860,
+    minWidth: 960,
+    minHeight: 640,
     backgroundColor: '#0f1115',
     title: 'Arletex',
     webPreferences: {
@@ -129,7 +162,6 @@ async function createWindow() {
 }
 
 function registerIpcHandlers() {
-  // Helper for calling local backend HTTP endpoints
   const callBackend = async <T>(
     endpoint: string,
     method = 'GET',
@@ -138,7 +170,10 @@ function registerIpcHandlers() {
     try {
       const res = await fetch(`http://127.0.0.1:${backendPort}${endpoint}`, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-arletex-auth': backendAuthToken,
+        },
         body: body ? JSON.stringify(body) : undefined,
       });
 
@@ -159,16 +194,16 @@ function registerIpcHandlers() {
     return callBackend('/api/conversations');
   });
 
-  ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_CREATE, async (_, title?: string) => {
-    return callBackend('/api/conversations', 'POST', { title: title || 'New Conversation' });
+  ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_CREATE, async (_, title?: string, isPinned = false) => {
+    return callBackend('/api/conversations', 'POST', { title: title || 'New Conversation', isPinned });
   });
 
   ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_GET, async (_, id: string) => {
     return callBackend(`/api/conversations/${id}`);
   });
 
-  ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_UPDATE, async (_, id: string, title?: string) => {
-    return callBackend(`/api/conversations/${id}`, 'PATCH', { title });
+  ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_UPDATE, async (_, id: string, title?: string, isPinned?: boolean) => {
+    return callBackend(`/api/conversations/${id}`, 'PATCH', { title, isPinned });
   });
 
   ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_DELETE, async (_, id: string) => {
@@ -180,31 +215,24 @@ function registerIpcHandlers() {
     return callBackend(`/api/conversations/${conversationId}/messages`);
   });
 
-  // Inference Health
+  // Inference Health & Config
   ipcMain.handle(IPC_CHANNELS.INFERENCE_HEALTH, async () => {
     return callBackend('/api/inference/health');
   });
 
-  // Inference Configuration Update
   ipcMain.handle(IPC_CHANNELS.CONFIG_UPDATE, async (_, config) => {
     return callBackend('/api/inference/config', 'POST', config);
   });
 
-  // Cancel Stream
+  // Stream Cancellation
   ipcMain.handle(IPC_CHANNELS.INFERENCE_STREAM_CANCEL, async (_, requestId: string) => {
     return callBackend('/api/inference/cancel', 'POST', { requestId });
   });
 
   // Stream Inference Start
-  // IMPORTANT: Do NOT await the full stream read inside the handler.
-  // ipcMain.handle serializes concurrent calls to the same channel, so
-  // awaiting a multi-minute stream would block all subsequent messages.
-  // Instead, kick off the stream in the background and return immediately.
   ipcMain.handle(
     IPC_CHANNELS.INFERENCE_STREAM_START,
     async (event, input: StartInferenceStreamInput) => {
-      // Launch the stream reader as a detached async task using native http.request
-      // to avoid undici 300s BodyTimeoutError during long CPU MoE generations
       const streamTask = async () => {
         try {
           const reqBody = JSON.stringify(input);
@@ -217,6 +245,7 @@ function registerIpcHandlers() {
               headers: {
                 'Content-Type': 'application/json',
                 Accept: 'text/event-stream',
+                'x-arletex-auth': backendAuthToken,
                 'Content-Length': Buffer.byteLength(reqBody),
               },
             },
@@ -227,7 +256,7 @@ function registerIpcHandlers() {
                 res.on('end', () => {
                   if (!event.sender.isDestroyed()) {
                     event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, {
-                      requestId: crypto.randomUUID(),
+                      requestId: input.requestId || crypto.randomUUID(),
                       conversationId: input.conversationId,
                       delta: '',
                       fullContent: '',
@@ -241,10 +270,9 @@ function registerIpcHandlers() {
               }
 
               let buffer = '';
-              res.setEncoding('utf8');
-              res.on('data', (chunkStr: string) => {
-                buffer += chunkStr;
-                const lines = buffer.split('\n\n');
+              res.on('data', (chunkBuffer: Buffer) => {
+                buffer += chunkBuffer.toString();
+                const lines = buffer.split('\n');
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
@@ -252,22 +280,31 @@ function registerIpcHandlers() {
                   if (trimmed.startsWith('data: ')) {
                     const jsonStr = trimmed.slice(6);
                     try {
-                      const chunk = JSON.parse(jsonStr) as StreamChunk;
+                      const chunk: StreamChunk = JSON.parse(jsonStr);
                       if (!event.sender.isDestroyed()) {
                         event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, chunk);
                       }
-                    } catch (e) {
-                      logger.warn('Failed to parse SSE line from backend', e);
-                    }
+                    } catch {}
                   }
                 }
               });
 
+              res.on('end', () => {
+                if (buffer.trim().startsWith('data: ')) {
+                  try {
+                    const chunk: StreamChunk = JSON.parse(buffer.trim().slice(6));
+                    if (!event.sender.isDestroyed()) {
+                      event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, chunk);
+                    }
+                  } catch {}
+                }
+              });
+
               res.on('error', (err) => {
-                logger.error('Backend response stream error', err);
+                logger.error('SSE response error', err);
                 if (!event.sender.isDestroyed()) {
                   event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, {
-                    requestId: crypto.randomUUID(),
+                    requestId: input.requestId || crypto.randomUUID(),
                     conversationId: input.conversationId,
                     delta: '',
                     fullContent: '',
@@ -284,7 +321,7 @@ function registerIpcHandlers() {
             logger.error('Error connecting to backend inference stream', err);
             if (!event.sender.isDestroyed()) {
               event.sender.send(IPC_CHANNELS.INFERENCE_STREAM_CHUNK, {
-                requestId: crypto.randomUUID(),
+                requestId: input.requestId || crypto.randomUUID(),
                 conversationId: input.conversationId,
                 delta: '',
                 fullContent: '',
@@ -302,13 +339,85 @@ function registerIpcHandlers() {
         }
       };
 
-      // Fire-and-forget: don't await
       streamTask().catch((e) => logger.error('Unhandled stream task error', e));
-
-      // Return immediately so the IPC channel is free for subsequent calls
       return { success: true, data: null };
     },
   );
+
+  // Memory Handlers
+  ipcMain.handle(IPC_CHANNELS.MEMORIES_LIST, async (_, options) => {
+    return callBackend('/api/memories/query', 'POST', options || {});
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MEMORIES_CREATE, async (_, input) => {
+    return callBackend('/api/memories', 'POST', input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MEMORIES_GET, async (_, id: string) => {
+    return callBackend(`/api/memories/${id}`);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MEMORIES_UPDATE, async (_, input) => {
+    return callBackend(`/api/memories/${input.id}`, 'PATCH', input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MEMORIES_DELETE, async (_, id: string) => {
+    return callBackend(`/api/memories/${id}`, 'DELETE');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.MEMORIES_QUERY, async (_, input) => {
+    if (input.primaryId && input.secondaryId) {
+      return callBackend(`/api/memories/${input.primaryId}/merge`, 'POST', { secondaryId: input.secondaryId });
+    }
+    return callBackend('/api/memories/query', 'POST', input);
+  });
+
+  // Activities Handlers
+  ipcMain.handle(IPC_CHANNELS.ACTIVITIES_LIST, async (_, status, origin) => {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    if (origin) params.set('origin', origin);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return callBackend(`/api/activities${qs}`);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ACTIVITIES_CREATE, async (_, input) => {
+    return callBackend('/api/activities', 'POST', input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ACTIVITIES_UPDATE, async (_, input) => {
+    return callBackend(`/api/activities/${input.id}`, 'PATCH', input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ACTIVITIES_DELETE, async (_, id: string) => {
+    return callBackend(`/api/activities/${id}`, 'DELETE');
+  });
+
+  // Telemetry & Preferences
+  ipcMain.handle(IPC_CHANNELS.TELEMETRY_GET, async () => {
+    return callBackend('/api/telemetry');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PREFERENCES_GET, async () => {
+    return callBackend('/api/preferences');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.PREFERENCES_SET, async (_, key: string, value: string) => {
+    return callBackend('/api/preferences', 'POST', { key, value });
+  });
+
+  // Voice & Vision
+  ipcMain.handle(IPC_CHANNELS.VOICE_TRANSCRIBE, async (_, input) => {
+    return callBackend('/api/voice/transcribe', 'POST', input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.VOICE_SYNTHESIZE, async (_, input) => {
+    return callBackend('/api/voice/synthesize', 'POST', input);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.VISION_INSPECT, async (_, input) => {
+    return callBackend('/api/vision/inspect', 'POST', input);
+  });
 }
 
 app.whenReady().then(async () => {

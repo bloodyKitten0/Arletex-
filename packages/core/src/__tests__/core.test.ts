@@ -10,8 +10,8 @@ describe('Core Package', () => {
       const config = createDefaultConfig();
       expect(config.dataDirectory).toBeDefined();
       expect(config.databasePath).toContain('arletex.sqlite');
-      expect(config.inference.provider).toBe('colibri');
-      expect(config.inference.serverUrl).toBe('http://127.0.0.1:8000');
+      expect(config.inference.provider).toBe('llama.cpp');
+      expect(config.inference.serverUrl).toBe('http://127.0.0.1:8080');
       expect(config.inference.contextSize).toBe(8192);
       expect(config.logLevel).toBe('info');
     });
@@ -57,6 +57,28 @@ describe('Core Package', () => {
       bus.emit('test-event', { value: 100 });
 
       expect(fn).not.toHaveBeenCalled();
+    });
+
+    it('safely catches and logs rejected async handlers without unhandled rejection', async () => {
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: () => mockLogger,
+      };
+      const bus = new EventBus(mockLogger as any);
+
+      bus.on('async-fail', async () => {
+        throw new Error('Async handler boom');
+      });
+
+      bus.emit('async-fail', { test: true });
+
+      // Give async microtask a cycle to reject
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(mockLogger.error).toHaveBeenCalled();
     });
   });
 

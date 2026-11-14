@@ -1,9 +1,20 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Conversation, InferenceHealthResult, Message, StreamChunk } from '@arletex/contracts';
-import { Sidebar } from './components/Sidebar';
-import { StatusBar } from './components/StatusBar';
-import { ChatView, GenerationStats } from './components/ChatView';
-import { MessageInput } from './components/MessageInput';
+import {
+  Conversation,
+  CreateMemoryInput,
+  InferenceHealthResult,
+  Message,
+  StreamChunk,
+} from '@arletex/contracts';
+import { NavSidebar, NavSection } from './components/nav/NavSidebar';
+import { TelemetryRail } from './components/telemetry/TelemetryRail';
+import { MainView } from './components/views/MainView';
+import { MemoryView } from './components/views/MemoryView';
+import { EmoView } from './components/views/EmoView';
+import { HistoryView } from './components/views/HistoryView';
+import { ActivitiesView } from './components/views/ActivitiesView';
+import { EnvironmentView } from './components/views/EnvironmentView';
+import { GenerationStats } from './components/ChatView';
 import { ArletexApi } from '../../preload';
 
 declare global {
@@ -13,11 +24,19 @@ declare global {
 }
 
 export const App: React.FC = () => {
+  // Navigation & UI Layout State
+  const [activeSection, setActiveSection] = useState<NavSection>('main');
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [telemetryCollapsed, setTelemetryCollapsed] = useState(false);
+  const [fullScreen, setFullScreen] = useState(false);
+
+  // Conversations State
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+
+  // Inference & Generation State
   const [health, setHealth] = useState<InferenceHealthResult | null>(null);
-  const [checkingHealth, setCheckingHealth] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -42,10 +61,9 @@ export const App: React.FC = () => {
     if (!api) return;
     try {
       const res = await api.listConversations();
-      console.log('[Arletex] listConversations result:', res);
       if (res.success) {
         setConversations(res.data);
-        if (res.data.length > 0 && !activeConversationId) {
+        if (res.data.length > 0 && !activeConversationIdRef.current) {
           setActiveConversationId(res.data[0]!.id);
         }
       } else {
@@ -55,9 +73,9 @@ export const App: React.FC = () => {
       console.error('[Arletex] listConversations error:', err);
       setError(err.message || 'Failed to load conversations');
     }
-  }, [api, activeConversationId]);
+  }, [api]);
 
-  // Load messages for active conversation
+  // Load messages for a conversation
   const loadMessages = useCallback(
     async (convId: string) => {
       if (!api) return;
@@ -78,17 +96,15 @@ export const App: React.FC = () => {
   // Check inference health
   const checkHealth = useCallback(async () => {
     if (!api) return;
-    setCheckingHealth(true);
     try {
       const res = await api.checkInferenceHealth();
-      console.log('[Arletex] checkInferenceHealth result:', res);
       if (res.success) {
         setHealth(res.data);
       } else {
         setHealth({
           status: 'error',
-          provider: 'colibri',
-          url: 'http://127.0.0.1:8000',
+          provider: 'llama.cpp',
+          url: 'http://127.0.0.1:8080',
           latencyMs: null,
           modelLoaded: null,
           error: res.error,
@@ -98,21 +114,18 @@ export const App: React.FC = () => {
     } catch (err: any) {
       setHealth({
         status: 'disconnected',
-        provider: 'colibri',
-        url: 'http://127.0.0.1:8000',
+        provider: 'llama.cpp',
+        url: 'http://127.0.0.1:8080',
         latencyMs: null,
         modelLoaded: null,
         error: err.message,
         isFallback: false,
       });
-    } finally {
-      setCheckingHealth(false);
     }
   }, [api]);
 
-  // Initial mount
+  // Initial load
   useEffect(() => {
-    console.log('[Arletex] UI Mounted. arletexApi available:', !!window.arletexApi);
     void loadConversations();
     void checkHealth();
 
@@ -157,7 +170,7 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [isGenerating, generationStats.startTime]);
 
-  // Listen to streaming chunks from Electron preload IPC
+  // Global stream chunk listener (background tasks continue regardless of active tab!)
   useEffect(() => {
     if (!api) return;
 
@@ -180,7 +193,6 @@ export const App: React.FC = () => {
         return;
       }
 
-      // Update live generation stats on token arrival
       if (chunk.delta) {
         setGenerationStats((prev) => {
           const now = Date.now();
@@ -211,29 +223,23 @@ export const App: React.FC = () => {
     return unsubscribe;
   }, [api, loadMessages]);
 
-  // Create conversation
+  // Conversation Management Handlers
   const handleCreateConversation = async () => {
-    console.log('[Arletex] Create conversation clicked. API available:', !!api);
-    if (!api) {
-      setError('API bridge not connected. Please rebuild or restart the app.');
-      return;
-    }
+    if (!api) return;
     try {
       const res = await api.createConversation('New Session');
-      console.log('[Arletex] createConversation result:', res);
       if (res.success) {
         setConversations((prev) => [res.data, ...prev]);
         setActiveConversationId(res.data.id);
+        setActiveSection('main');
       } else {
         setError(res.error);
       }
     } catch (err: any) {
-      console.error('[Arletex] createConversation error:', err);
       setError(err.message);
     }
   };
 
-  // Delete conversation
   const handleDeleteConversation = async (id: string) => {
     if (!api) return;
     try {
@@ -244,14 +250,32 @@ export const App: React.FC = () => {
         if (activeConversationId === id) {
           setActiveConversationId(next.length > 0 ? next[0]!.id : null);
         }
+      } else {
+        setError(res.error);
       }
     } catch (err: any) {
       setError(err.message);
     }
   };
 
-  // Send message
-  const handleSendMessage = async (content: string) => {
+  const handleUpdateConversation = async (id: string, title?: string, isPinned?: boolean) => {
+    if (!api) return;
+    try {
+      const res = await api.updateConversation(id, title, isPinned);
+      if (res.success) {
+        setConversations((prev) =>
+          prev.map((c) => (c.id === id ? { ...c, ...(title ? { title } : {}), ...(isPinned !== undefined ? { isPinned } : {}) } : c)),
+        );
+      } else {
+        setError(res.error);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  // Send message with multimodal vision support
+  const handleSendMessage = async (content: string, imageBase64?: string) => {
     if (!api) return;
 
     let targetConvId: string;
@@ -276,7 +300,7 @@ export const App: React.FC = () => {
       content,
       tokenCount: null,
       createdAt: new Date().toISOString(),
-      metadata: {},
+      metadata: imageBase64 ? { imageBase64, hasImage: true } : {},
     };
     setMessages((prev) => [...prev, tempUserMsg]);
 
@@ -296,12 +320,10 @@ export const App: React.FC = () => {
     const requestId = crypto.randomUUID();
     activeRequestIdRef.current = requestId;
 
-    // Fire-and-forget: IPC handler returns immediately and streams
-    // chunks via the INFERENCE_STREAM_CHUNK channel, so no need to
-    // await the full generation. Errors are delivered as isDone chunks.
     api.startInferenceStream({
       conversationId: targetConvId,
       userMessageContent: content,
+      imageBase64,
     }).then((res) => {
       if (!res.success) {
         setError(res.error);
@@ -324,56 +346,83 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleToggleProvider = async (targetProvider: 'colibri' | 'llama.cpp') => {
-    if (!api) return;
+  // Memory creation from Main
+  const handleCreateMemoryFromChat = async (input: CreateMemoryInput): Promise<boolean> => {
+    if (!api) return false;
     try {
-      setCheckingHealth(true);
-      await api.updateInferenceConfig({ provider: targetProvider });
-      await checkHealth();
-    } catch (err: any) {
-      setError(`Failed to switch provider: ${err.message}`);
-    } finally {
-      setCheckingHealth(false);
+      const res = await api.createMemory(input);
+      return res.success;
+    } catch {
+      return false;
     }
   };
 
+  const activeConversation = conversations.find((c) => c.id === activeConversationId) || null;
+
   return (
-    <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar
-        conversations={conversations}
-        activeId={activeConversationId}
-        onSelect={setActiveConversationId}
-        onCreate={handleCreateConversation}
-        onDelete={handleDeleteConversation}
-      />
-
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
-        <StatusBar
-          health={health}
-          checking={checkingHealth}
-          onRefresh={() => void checkHealth()}
-          speedTps={generationStats.tokensPerSecond}
+    <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--bg-primary)' }}>
+      {/* Primary Left Navigation (Hidden in Full Screen Mode) */}
+      {!fullScreen && (
+        <NavSidebar
+          activeSection={activeSection}
+          onSelectSection={setActiveSection}
+          collapsed={navCollapsed}
+          onToggleCollapse={() => setNavCollapsed(!navCollapsed)}
           isGenerating={isGenerating}
-          onToggleProvider={handleToggleProvider}
         />
+      )}
 
-        <ChatView
-          messages={messages}
-          streamingText={streamingText}
-          isGenerating={isGenerating}
-          error={error}
-          onClearError={() => setError(null)}
-          generationStats={generationStats}
-        />
+      {/* Central Active View Workspace */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0, position: 'relative' }}>
+        {activeSection === 'main' && (
+          <MainView
+            conversation={activeConversation}
+            messages={messages}
+            streamingText={streamingText}
+            isGenerating={isGenerating}
+            error={error}
+            onClearError={() => setError(null)}
+            generationStats={generationStats}
+            onSendMessage={handleSendMessage}
+            onCancelGeneration={handleCancelGeneration}
+            health={health}
+            fullScreen={fullScreen}
+            onToggleFullScreen={() => setFullScreen(!fullScreen)}
+            onCreateMemory={handleCreateMemoryFromChat}
+          />
+        )}
 
-        <MessageInput
-          onSend={handleSendMessage}
-          onCancel={handleCancelGeneration}
-          isGenerating={isGenerating}
-          disabled={isGenerating}
-          health={health}
-        />
+        {activeSection === 'memory' && <MemoryView />}
+
+        {activeSection === 'emo' && <EmoView />}
+
+        {activeSection === 'history' && (
+          <HistoryView
+            conversations={conversations}
+            activeId={activeConversationId}
+            onSelectAndOpen={(id) => {
+              setActiveConversationId(id);
+              setActiveSection('main');
+            }}
+            onCreate={handleCreateConversation}
+            onDelete={handleDeleteConversation}
+            onUpdate={handleUpdateConversation}
+          />
+        )}
+
+        {activeSection === 'activities' && <ActivitiesView />}
+
+        {activeSection === 'environment' && <EnvironmentView />}
       </main>
+
+      {/* Technical Telemetry Rail (Hidden in Full Screen Mode) */}
+      {!fullScreen && (
+        <TelemetryRail
+          collapsed={telemetryCollapsed}
+          onToggleCollapse={() => setTelemetryCollapsed(!telemetryCollapsed)}
+          speedTps={generationStats.tokensPerSecond}
+        />
+      )}
     </div>
   );
 };

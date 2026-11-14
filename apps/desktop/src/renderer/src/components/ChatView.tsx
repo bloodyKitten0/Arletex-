@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Message } from '@arletex/contracts';
-import { Bot, User, AlertCircle, Zap, Loader2, Sparkles, Terminal } from 'lucide-react';
+import { Bot, User, AlertCircle, Zap, Loader2 } from 'lucide-react';
 
 export interface GenerationStats {
   startTime: number | null;
@@ -300,44 +300,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <span>{generationStats.tokenCount} tokens</span>
             <span style={{ opacity: 0.3 }}>|</span>
             <span>{generationStats.elapsedSeconds}s</span>
-
-            {generationStats.stage === 'coding_specialist' && (
-              <span
-                style={{
-                  marginLeft: '8px',
-                  backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                  color: '#60a5fa',
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Terminal size={11} /> 30B Coder Active
-              </span>
-            )}
-
-            {generationStats.stage === 'synthesis' && (
-              <span
-                style={{
-                  marginLeft: '8px',
-                  backgroundColor: 'rgba(168, 85, 247, 0.2)',
-                  color: '#c084fc',
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Sparkles size={11} /> 35B Reviewing
-              </span>
-            )}
           </div>
 
           <div

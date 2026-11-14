@@ -2,6 +2,35 @@
 node_modules/
 .pnpm-store/
 
+# Python virtual environments & bytecode
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Model weights, embeddings, & neural checkpoints
+*.pt
+*.pth
+*.bin
+*.onnx
+*.gguf
+*.index
+models/
+
+# Audio/media outputs & temporary buffers
+*.wav
+*.mp3
+*.webm
+*.ogg
+*.flac
+temp_*
+tmp/
+
 # Build outputs
 dist/
 out/
@@ -33,3 +62,7 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Miscellaneous
+*.log
+lib64/

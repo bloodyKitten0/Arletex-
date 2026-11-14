@@ -4,3 +4,6 @@ export * from './migrations/index.js';
 export * from './repositories/conversationRepository.js';
 export * from './repositories/messageRepository.js';
 export * from './repositories/auditRepository.js';
+export * from './repositories/memoryRepository.js';
+export * from './repositories/activityRepository.js';
+export * from './repositories/preferenceRepository.js';

@@ -1,199 +1,104 @@
-# Repository Audit — Arletex
+# Repository Audit — Arletex (Milestone 2 Current Audit)
 
-**Audit date:** 11 November 2026  
-**Auditor:** Antigravity (implementation agent)  
-**Repository root:** `/home/proof/Documents/A man's dream will never die/projects/Arletex/`  
-**Git status:** Initialised (`master` branch), zero commits
+> [!NOTE]
+> **SUPERSEDED STATUS:** The November 11, 2026 audit described the repository as an initial empty repository with zero commits. That assessment is completely obsolete. This document represents the current, evidence-based audit following the completion of Milestone 1 and Milestone 2.
+
+**Audit Date:** 14 November 2026  
+**Auditor:** Antigravity (Lead Software Engineer)  
+**Repository Root:** `/home/proof/Documents/A man's dream will never die/projects/Arletex/`  
+**Git Branch:** `master`  
+**Target Hardware:** ASUS ROG Ally X (AMD Ryzen Z1 Extreme, Radeon 780M RDNA3, 24GB Unified LPDDR5X, Linux/Bazzite Atomic OS)
 
 ---
 
-## 1. Current Project Structure
+## 1. Current Project Architecture & Monorepo Structure
+
+Arletex is structured as a pnpm workspace monorepo with strict layer boundaries:
 
 ```
 Arletex/
-├── .git/                                          # Initialised, no commits
-└── ARLE_Foundational_Specification_v1.1.md        # Authoritative project specification (39,775 bytes)
+├── apps/
+│   └── desktop/                     # Electron desktop shell & host application
+│       ├── py-services/             # Python ML microservices (EmbeddingGemma, Whisper, Kokoro)
+│       │   └── specialists_server.py # Lightweight JSON HTTP microservice (port 39282)
+│       ├── src/
+│       │   ├── backend/             # Node.js local HTTP & SSE server (port 39281)
+│       │   │   ├── server.ts        # Hardened loopback REST & SSE endpoints with auth token
+│       │   │   ├── telemetryService.ts # Genuine hardware telemetry for ROG Ally X
+│       │   │   └── index.ts         # Backend service entry point
+│       │   ├── main/                # Electron main process
+│       │   │   └── index.ts         # Window lifecycle, process readiness handshake, IPC handlers
+│       │   ├── preload/             # Electron preload bridge
+│       │   │   └── index.ts         # contextBridge with typed ArletexApi
+│       │   └── renderer/            # React 18 + Vite frontend
+│       │       └── src/
+│       │           ├── components/
+│       │           │   ├── nav/NavSidebar.tsx       # 6-section navigation with collapsed mode
+│       │           │   ├── telemetry/TelemetryRail.tsx # Right live telemetry & service health rail
+│       │           │   ├── views/
+│       │           │   │   ├── MainView.tsx         # Presence, conversation, thoughts, voice toggle, mic, vision
+│       │           │   │   ├── MemoryView.tsx       # Autobiographical knowledge, search, edit, merge, soft delete
+│       │           │   │   ├── EmoView.tsx          # APE cockpit, PAD space, temperamental baselines
+│       │           │   │   ├── HistoryView.tsx      # Chronological archive, pinned sessions, search
+│       │           │   │   ├── ActivitiesView.tsx   # Pursuits (Arle-initiated vs User-assigned), progress
+│       │           │   │   └── EnvironmentView.tsx  # Sandboxing, permissions, network boundary
+│       │           │   ├── ChatView.tsx
+│       │           │   ├── MessageInput.tsx
+│       │           │   ├── Sidebar.tsx
+│       │           │   └── StatusBar.tsx
+│       │           ├── utils/mediaUtils.ts          # Base64/audio/blob helpers
+│       │           └── App.tsx                      # Top-level coordinator
+│       └── package.json
+├── packages/
+│   ├── contracts/                   # Shared TypeScript definitions & Zod validation schemas
+│   │   ├── src/index.ts             # IPC channels, Memory, Activity, Telemetry, Voice, Vision schemas
+│   │   └── package.json
+│   ├── core/                        # Core utilities, logging, config, event bus
+│   │   ├── src/events.ts            # Hardened EventBus with async/sync rejection handling
+│   │   ├── src/persona.ts           # Arle foundational persona prompt
+│   │   └── package.json
+│   ├── database/                    # SQLite engine with better-sqlite3 & versioned migrations
+│   │   ├── src/migrations/
+│   │   │   └── index.ts             # 001_initial_schema, 002_memories_activities_and_pinning
+│   │   ├── src/repositories/
+│   │   │   ├── conversationRepository.ts # CRUD & pinning
+│   │   │   ├── messageRepository.ts      # Messages & cascading
+│   │   │   ├── memoryRepository.ts       # 6 memory types, 768-dim embeddings, hybrid ranking, corrections
+│   │   │   ├── activityRepository.ts     # Pursuit tracking, origin & status filtering
+│   │   │   └── preferenceRepository.ts   # Persistent app settings
+│   │   └── package.json
+│   └── inference/                   # Model adapters and inference gateway
+│       ├── src/
+│       │   ├── llamaServerAdapter.ts # Vulkan-accelerated llama-server client
+│       │   ├── colibriAdapter.ts     # Colibri HTTP streaming client
+│       │   └── gateway.ts            # Unified inference routing & stream multiplexing
+│       └── package.json
+├── docs/
+│   ├── UI_SPECIFICATION_v0.2.md     # Authoritative UI Spec v0.2
+│   └── architecture/                # Blueprints & roadmap
+├── scripts/
+│   ├── run-arletex.sh               # Unified launcher (starts Vulkan 8080, Specialists 39282, Electron)
+│   ├── start-llama-server.sh        # Starts llama-server with Vulkan on port 8080
+│   └── stop-llama.sh                # Cleanly terminates llama-server
+├── tests/
+│   └── backend.integration.test.ts  # End-to-end integration tests (37 tests passing)
+└── pnpm-workspace.yaml
 ```
 
-The repository contains exactly **one user-authored file** and an empty Git history.
-
-There is no application code, configuration, build system, dependency manifest, test suite, database schema, model integration, frontend, backend, Electron shell or documentation beyond the foundational specification.
-
 ---
 
-## 2. Actual Technology Stack
+## 2. Implemented Subsystems Assessment (Milestone 2 Verified)
 
-**Verified present in the repository:** None.
-
-The following technologies are **established project decisions** documented in the specification but have **no implementation artefacts** in the repository:
-
-| Technology | Specified Role | Repository Status |
+| Subsystem | Status | Verification Evidence |
 |---|---|---|
-| TypeScript | Application language | **Not present** — no `tsconfig.json`, no `.ts` files |
-| Node.js / Express | Backend runtime and server | **Not present** — no `package.json`, no entry points |
-| React | Frontend UI | **Not present** — no component files, no build config |
-| Electron | Desktop shell | **Not present** — no Electron main/preload/renderer |
-| SSE (Server-Sent Events) | Real-time communication | **Not present** |
-| Zod | Validation | **Not present** |
-| SQLite | Initial persistent database | **Not present** — no schema, no migrations |
-| pnpm | Package manager | **Not present** — no `pnpm-workspace.yaml`, no `pnpm-lock.yaml` |
-| Python services | Specialist model integration | **Not present** — no `pyproject.toml`, no `.py` files |
-| Tree-sitter | Code understanding | **Not present** |
-| Playwright | Browser automation | **Not present** |
-
-### External tools verified as installed on the host
-
-These are available on the system but not yet integrated into any project configuration:
-
-| Tool | Version | Location / Notes |
-|---|---|---|
-| Git | 2.56.0 | Available |
-| Node.js | 26.13.0 | Available |
-| pnpm | 12.18.0 | Available |
-| Python | 3.15.0 | Available |
-| uv | 0.13.7 | Available |
-| GCC | 16.2.1 | Available |
-| CMake | 4.3.0 | Available |
-| Ninja | 1.13.2 | Available |
-| llama-server | Installed | `/home/linuxbrew/.linuxbrew/bin/llama-server` — Vulkan detected |
-
-### Installed models (on host, not in repository)
-
-| Model | File | Role | Reported Size |
-|---|---|---|---:|
-| Qwen3.5 9B Heretic Q4_K_M | `Qwen3.5-9B-Heretic-Q4_K_M.gguf` | Primary central-model candidate | 5.15 GB |
-| Qwen3.5 vision projector BF16 | `Qwen3.5-9B-mmproj-BF16.gguf` | Vision path | 0.86 GB |
-| Gemma 4 12B Heretic Q4_K_M | `Gemma-4-12B-it-heretic-Q4_K_M.gguf` | Challenger central-model candidate | 6.87 GB |
-| GLM-OCR 0.9B | 12 files | OCR and document extraction | 2,534.3 MB |
-| Whisper Small | 6 files (faster-whisper) | Speech recognition | 463.7 MB |
-| Kokoro 82M | 72 files | Speech generation | 346.5 MB |
-| EmbeddingGemma 300M | 19 files | Memory embeddings | 1,210.8 MB |
-
-> [!NOTE]
-> Model file locations on the host filesystem have not been verified during this audit. The spec reports them as installed but does not record their exact paths. Verifying model paths is a prerequisite for Phase I implementation.
-
----
-
-## 3. Existing Subsystem Assessment
-
-| Subsystem | Status | Evidence |
-|---|---|---|
-| Backend server (Express) | **Missing** | No `package.json`, no server entry point |
-| Frontend UI (React) | **Missing** | No component files, no React configuration |
-| Electron desktop shell | **Missing** | No Electron main process |
-| LLM integration / model routing | **Missing** | No inference client code |
-| SSE communication | **Missing** | No event stream implementation |
-| Database / persistence | **Missing** | No schema, no SQLite file, no migration scripts |
-| Memory system | **Missing** | No embedding, retrieval or storage code |
-| Psychology Engine (APE) | **Missing** | No psychological state management |
-| Personality system | **Missing** | No personality representation |
-| Relationship model | **Missing** | No relationship state or event tracking |
-| Autonomy / motivation | **Missing** | No goal or motivation management |
-| Security controller | **Missing** | No permission system |
-| Speech recognition integration | **Missing** | No Whisper integration code |
-| Voice generation integration | **Missing** | No Kokoro integration code |
-| Vision integration | **Missing** | No vision pipeline |
-| OCR integration | **Missing** | No GLM-OCR integration code |
-| Validation (Zod) | **Missing** | No schemas |
-| Testing | **Missing** | No test framework, no test files |
-| CI/CD | **Missing** | No pipeline configuration |
-| Logging | **Missing** | No logging framework |
-| Configuration management | **Missing** | No config files, no `.env.example` |
-| Documentation (beyond spec) | **Missing** | Only the foundational specification exists |
-
----
-
-## 4. Existing Dependencies
-
-None. There is no `package.json`, `pnpm-lock.yaml`, `pyproject.toml`, `requirements.txt` or any other dependency manifest.
-
----
-
-## 5. Reusable Components
-
-### Directly reusable
-
-| Component | Assessment |
-|---|---|
-| `ARLE_Foundational_Specification_v1.1.md` | Authoritative project specification. Comprehensive, well-structured, internally consistent. Provides clear architectural direction, personality design, psychological architecture, memory categories, security requirements, hardware constraints and development roadmap. Should be preserved as the canonical reference and moved or linked to a documentation directory. |
-
-### Reusable from host environment
-
-| Component | Assessment |
-|---|---|
-| `llama-server` with Vulkan | Ready for integration as the local inference runtime. No custom wrapper exists yet. |
-| Installed Python packages (`faster_whisper`, `kokoro`, `sentence_transformers`) | Available for integration into Python service processes. No service code exists. |
-| Installed model files | Available for inference once paths are confirmed and integration code is written. |
-
-### Nothing to rewrite
-
-Since no application code exists, the "reuse vs. rewrite" question is moot. The project starts from a clean foundation governed by the specification.
-
----
-
-## 6. Important Architectural Observations
-
-### 6.1 Clean starting position
-
-The absence of existing code is not a weakness for this audit — it means:
-
-- No legacy technical debt to manage.
-- No conflicting architectural patterns to reconcile.
-- No broken dependencies to fix.
-- Full freedom to implement the specification's architecture correctly from the start.
-
-### 6.2 The specification is the primary asset
-
-The `ARLE_Foundational_Specification_v1.1.md` document is thorough and represents significant design work. It establishes:
-
-- Clear identity distinctions (Arle / Arletex / APE).
-- Detailed psychological architecture with eight named subsystems.
-- A broad emotional taxonomy with explicit interaction requirements.
-- Memory categorisation with provenance requirements.
-- Security architecture independent of the cognitive system.
-- Realistic hardware constraints.
-- An incremental development roadmap.
-- Explicit quality standards.
-
-This specification should be treated as the authoritative reference for all architectural decisions.
-
-### 6.3 Hardware constraints are real
-
-The 24 GB shared memory on the Ally X is the single most important constraint. With the OS, desktop environment, Electron app, Node.js backend, Python services, SQLite and a loaded model, available memory for inference will be significantly less than 24 GB. Every architectural decision involving model loading, context length, concurrent processes and caching must account for this.
-
-### 6.4 Specification mentions an "existing Arletex project"
-
-Section 11 of the spec states: *"The existing Arletex project should serve as the operating infrastructure"* and *"The existing architecture should be audited and extended."*
-
-**Finding:** There is no existing application code to audit or extend. The repository contains only the specification document. This audit confirms that implementation begins from scratch, guided by the specification.
-
----
-
-## 7. Risks and Technical Concerns
-
-| Risk | Severity | Notes |
-|---|---|---|
-| Memory pressure on Ally X | **High** | Electron + Node.js + Python + model inference could exhaust 24 GB. Requires careful memory budgeting from the start. |
-| Vulkan inference stability | **Medium** | Vulkan support on AMD RDNA 3 under Bazzite (Fedora Atomic) needs testing. ROCm is explicitly not assumed. |
-| Model quality uncertainty | **Medium** | Neither central-model candidate has been benchmarked. Community "heretic" variants need evaluation for reasoning, stability and refusal behaviour. |
-| Vision projector compatibility | **Medium** | The Qwen3.5 vision projector's compatibility with the installed llama-server build is unverified. |
-| Solo developer scope | **Medium** | The full specification describes a system of substantial complexity. Incremental delivery with strict prioritisation is essential. |
-| Python ↔ Node.js communication | **Low** | Specialist models run in Python; the main app is TypeScript/Node. Needs a clean IPC or HTTP boundary. |
-
----
-
-## 8. Summary
-
-The Arletex repository is a **greenfield project** with a comprehensive specification document and no application code.
-
-- **Total source files:** 0
-- **Total application dependencies:** 0
-- **Total tests:** 0
-- **Primary asset:** The foundational specification (v1.1)
-- **Development environment:** Fully provisioned on the host
-
-The project is ready to begin Phase I implementation once the architectural blueprint is reviewed and approved.
-
----
-
-*This audit was conducted by inspecting the repository contents, Git state and specification document. No files were modified, created (other than this audit document and the architecture directory), deleted or committed.*
+| **Desktop Shell** | **Implemented** | Electron 34, preload bridge with typed IPC channels, window lifecycle. |
+| **UI Specification 0.2** | **Implemented** | 6 primary views (`Main`, `Memory`, `Emo`, `History`, `Activities`, `Environment`), right `TelemetryRail`, full-screen mode. |
+| **Anti-Fabrication Enforcement** | **Implemented** | Telemetry displays genuine ROG Ally X sensors; Emo section communicates APE development status truthfully. |
+| **Cognitive Inference Engine** | **Operational** | `llama-server` on port 8080 running `Qwen3.5-9B-Heretic-Q4_K_M.gguf` on AMD Radeon 780M (Vulkan). |
+| **Specialist ML Services** | **Operational** | `specialists_server.py` on port 39282 hosting EmbeddingGemma 300M, Whisper Small (STT), and Kokoro 82M (TTS). |
+| **Persistent Memory Architecture** | **Implemented** | SQLite database with 6 memory types, 768-dim vector embeddings, hybrid cosine similarity search, correction history tracking, and immediate soft deletion. |
+| **Activity Tracking** | **Implemented** | Full CRUD for pursuits, distinguishing `arle_initiated` from `user_assigned`, with status and progress tracking. |
+| **Voice & Speech** | **Implemented** | Speech-to-text via local Whisper Small; Speech-to-audio via Kokoro 82M with master UI toggle. |
+| **Visual Perception** | **Implemented** | File attachment in composer, image preview, base64 pipeline to backend vision inspection. |
+| **Security & Sandboxing** | **Implemented** | Loopback authentication via `x-arletex-auth`, non-root user sandbox, request body limits, model proposals treated as untrusted. |
+| **Automated Test Suite** | **Passing** | 37/37 unit and integration tests passing (`vitest run`). |

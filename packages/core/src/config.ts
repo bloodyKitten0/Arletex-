@@ -25,18 +25,18 @@ export function createDefaultConfig(overrides?: AppConfigOverrides): AppConfig {
   const activeProvider =
     overrides?.inference?.provider ??
     (process.env['ARLETEX_INFERENCE_PROVIDER'] as any) ??
-    'colibri';
+    'llama.cpp';
 
   // Primary URL & model resolution based on provider
   const defaultServerUrl =
-    activeProvider === 'colibri'
-      ? process.env['COLIBRI_SERVER_URL'] ?? 'http://127.0.0.1:8000'
-      : process.env['LLAMA_SERVER_URL'] ?? 'http://127.0.0.1:8080';
+    activeProvider === 'llama.cpp'
+      ? process.env['LLAMA_SERVER_URL'] ?? 'http://127.0.0.1:8080'
+      : process.env['COLIBRI_SERVER_URL'] ?? 'http://127.0.0.1:8000';
 
   const defaultModelId =
-    activeProvider === 'colibri'
-      ? process.env['COLIBRI_MODEL_ID'] ?? 'qwen3.6-colibri'
-      : process.env['LLAMA_MODEL_ID'] ?? 'Qwen3.5-9B-Heretic-Q4_K_M';
+    activeProvider === 'llama.cpp'
+      ? process.env['LLAMA_MODEL_ID'] ?? 'Qwen3.5-9B-Heretic-Q4_K_M'
+      : process.env['COLIBRI_MODEL_ID'] ?? 'qwen3.6-colibri';
 
   const fallbackEnabled =
     overrides?.inference?.fallbackEnabled ??
@@ -69,6 +69,10 @@ export function createDefaultConfig(overrides?: AppConfigOverrides): AppConfig {
         enabled:
           overrides?.inference?.specialistCoding?.enabled ??
           (process.env['SPECIALIST_CODING_ENABLED'] ? process.env['SPECIALIST_CODING_ENABLED'] !== 'false' : true),
+        provider:
+          overrides?.inference?.specialistCoding?.provider ??
+          (process.env['SPECIALIST_CODING_PROVIDER'] as any) ??
+          'llama.cpp',
         serverUrl:
           overrides?.inference?.specialistCoding?.serverUrl ??
           process.env['SPECIALIST_CODING_URL'] ??
@@ -76,7 +80,7 @@ export function createDefaultConfig(overrides?: AppConfigOverrides): AppConfig {
         modelId:
           overrides?.inference?.specialistCoding?.modelId ??
           process.env['SPECIALIST_CODING_MODEL'] ??
-          'qwen3-coder-30b-a3b-colibri',
+          'Qwen3.5-9B-Heretic-Q4_K_M',
         temperature: overrides?.inference?.specialistCoding?.temperature ?? 0.2,
         maxTokens: overrides?.inference?.specialistCoding?.maxTokens ?? 4096,
       },

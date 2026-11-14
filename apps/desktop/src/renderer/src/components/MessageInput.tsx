@@ -22,15 +22,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   const hostName =
     health?.status === 'connected'
-      ? (health.provider === 'colibri'
-          ? (health.specialistCoding?.status === 'connected'
-              ? 'Colibri (35B Central + 30B Coder)'
-              : 'Colibri Local Engine')
-          : 'llama.cpp (Vulkan)') +
-        (health.isFallback ? ' (Fallback)' : '')
-      : `${health?.provider === 'llama.cpp' ? 'llama.cpp' : 'Colibri'} (${health?.status || 'offline'})`;
+      ? 'llama.cpp (Vulkan)'
+      : `llama.cpp (${health?.status || 'offline'})`;
 
-  const rawModel = health?.modelLoaded || (health?.provider === 'colibri' ? 'qwen3.6-colibri' : 'Qwen3.5-9B-Heretic');
+  const rawModel = health?.modelLoaded || 'Qwen3.5-9B-Heretic';
   const shortModel = rawModel.split('/').pop()?.replace('.gguf', '') || rawModel;
 
   useEffect(() => {

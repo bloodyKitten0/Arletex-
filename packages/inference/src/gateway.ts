@@ -17,7 +17,7 @@ export class InferenceGateway implements IInferenceProvider {
   private readonly logger: ILogger;
   private readonly colibriAdapter: ColibriAdapter;
   private readonly llamaAdapter: LlamaServerAdapter;
-  private readonly codingSpecialistAdapter: ColibriAdapter;
+  private readonly codingSpecialistAdapter: IInferenceProvider;
 
   constructor(config: Partial<InferenceConfig> = {}, logger: ILogger = rootLogger) {
     this.config = InferenceConfigSchema.parse(config);
@@ -51,18 +51,33 @@ export class InferenceGateway implements IInferenceProvider {
       logger,
     );
 
-    // Coding Specialist Engine (Heretic Qwen3-Coder-30B)
-    this.codingSpecialistAdapter = new ColibriAdapter(
-      {
-        ...this.config,
-        provider: 'colibri',
-        serverUrl: this.config.specialistCoding.serverUrl,
-        defaultModelId: this.config.specialistCoding.modelId,
-        temperature: this.config.specialistCoding.temperature,
-        maxTokens: this.config.specialistCoding.maxTokens,
-      },
-      logger.child('CodingSpecialist'),
-    );
+    // Coding Specialist Engine (Qwen 3.5-9B Heretic via llama-server Vulkan or Colibri)
+    const specProvider = this.config.specialistCoding.provider ?? 'llama.cpp';
+    if (specProvider === 'colibri') {
+      this.codingSpecialistAdapter = new ColibriAdapter(
+        {
+          ...this.config,
+          provider: 'colibri',
+          serverUrl: this.config.specialistCoding.serverUrl,
+          defaultModelId: this.config.specialistCoding.modelId,
+          temperature: this.config.specialistCoding.temperature,
+          maxTokens: this.config.specialistCoding.maxTokens,
+        },
+        logger.child('CodingSpecialist'),
+      );
+    } else {
+      this.codingSpecialistAdapter = new LlamaServerAdapter(
+        {
+          ...this.config,
+          provider: 'llama.cpp',
+          serverUrl: this.config.specialistCoding.serverUrl,
+          defaultModelId: this.config.specialistCoding.modelId,
+          temperature: this.config.specialistCoding.temperature,
+          maxTokens: this.config.specialistCoding.maxTokens,
+        },
+        logger.child('CodingSpecialist'),
+      );
+    }
   }
 
   public getActiveProvider(): IInferenceProvider {
@@ -73,7 +88,7 @@ export class InferenceGateway implements IInferenceProvider {
     return this.config.provider === 'colibri' ? this.llamaAdapter : this.colibriAdapter;
   }
 
-  public getCodingSpecialistAdapter(): ColibriAdapter {
+  public getCodingSpecialistAdapter(): IInferenceProvider {
     return this.codingSpecialistAdapter;
   }
 
@@ -119,7 +134,7 @@ export class InferenceGateway implements IInferenceProvider {
 
     this.codingSpecialistAdapter.updateConfig({
       ...this.config,
-      provider: 'colibri',
+      provider: this.config.specialistCoding.provider ?? 'llama.cpp',
       serverUrl: this.config.specialistCoding.serverUrl,
       defaultModelId: this.config.specialistCoding.modelId,
       temperature: this.config.specialistCoding.temperature,

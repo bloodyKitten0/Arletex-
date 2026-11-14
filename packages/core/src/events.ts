@@ -1,7 +1,14 @@
+import { ILogger, rootLogger } from './logger.js';
+
 export type EventHandler<T = unknown> = (payload: T) => void | Promise<void>;
 
 export class EventBus {
   private handlers = new Map<string, Set<EventHandler<any>>>();
+  private logger: ILogger;
+
+  constructor(logger: ILogger = rootLogger.child('EventBus')) {
+    this.logger = logger;
+  }
 
   public on<T>(event: string, handler: EventHandler<T>): () => void {
     if (!this.handlers.has(event)) {
@@ -24,9 +31,14 @@ export class EventBus {
 
     for (const handler of set) {
       try {
-        void handler(payload);
+        const result = handler(payload);
+        if (result && typeof (result as Promise<void>).catch === 'function') {
+          (result as Promise<void>).catch((asyncErr) => {
+            this.logger.error(`Unhandled error in async event handler for "${event}":`, asyncErr);
+          });
+        }
       } catch (err) {
-        console.error(`[EventBus] Error in event handler for "${event}":`, err);
+        this.logger.error(`Error in synchronous event handler for "${event}":`, err);
       }
     }
   }

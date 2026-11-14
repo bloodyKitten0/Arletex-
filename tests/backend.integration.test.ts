@@ -185,4 +185,154 @@ describe('Backend Integration Test', () => {
     expect(updated.provider).toBe('llama.cpp');
     expect(updated.defaultModelId).toBe('custom-switched-model');
   });
+
+  it('supports persistent memory CRUD, audit tracking, and retrieval', async () => {
+    // 1. Create a memory record
+    const createRes = await fetch(`http://127.0.0.1:${serverPort}/api/memories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'episodic',
+        content: 'Arle reflected on her initial awakening on ROG Ally X and confirmed her persistent identity.',
+        tags: ['identity', 'awakening', 'ally-x'],
+        importance: 0.95,
+        confidence: 1.0,
+        provenance: 'direct_observation',
+      }),
+    });
+
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as any;
+    expect(created.id).toBeDefined();
+    expect(created.type).toBe('episodic');
+    expect(created.importance).toBe(0.95);
+    expect(created.correctionHistory).toHaveLength(0);
+
+    // 2. Query memories
+    const queryRes = await fetch(`http://127.0.0.1:${serverPort}/api/memories/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'episodic',
+        query: 'awakening',
+      }),
+    });
+    expect(queryRes.status).toBe(200);
+    const queryResults = (await queryRes.json()) as any[];
+    expect(queryResults.length).toBeGreaterThanOrEqual(1);
+    expect(queryResults[0].id).toBe(created.id);
+
+    // 3. Update memory (tracks correction history)
+    const updateRes = await fetch(`http://127.0.0.1:${serverPort}/api/memories/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: 'Arle reflected on her awakening on ROG Ally X with Qwen 3.5-9B Heretic cognitive engine.',
+        reason: 'Added cognitive model specification',
+      }),
+    });
+    expect(updateRes.status).toBe(200);
+    const updated = (await updateRes.json()) as any;
+    expect(updated.content).toContain('Qwen 3.5-9B Heretic');
+    expect(updated.correctionHistory).toHaveLength(1);
+    expect(updated.correctionHistory[0].reason).toBe('Added cognitive model specification');
+
+    // 4. Soft delete memory
+    const deleteRes = await fetch(`http://127.0.0.1:${serverPort}/api/memories/${created.id}`, {
+      method: 'DELETE',
+    });
+    expect(deleteRes.status).toBe(200);
+
+    // Verify excluded from normal queries immediately
+    const queryAfterDelete = await fetch(`http://127.0.0.1:${serverPort}/api/memories/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const remaining = (await queryAfterDelete.json()) as any[];
+    expect(remaining.find((m) => m.id === created.id)).toBeUndefined();
+  });
+
+  it('supports activities CRUD and distinguishes Arle-initiated from user-assigned', async () => {
+    // 1. Create Arle-initiated activity
+    const arleActRes = await fetch(`http://127.0.0.1:${serverPort}/api/activities`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Master Sicilian Defense in Chess',
+        objective: 'Deepen tactical sharpness and counter-attacking patterns.',
+        origin: 'arle_initiated',
+        status: 'in_progress',
+        progress: 0.35,
+      }),
+    });
+    expect(arleActRes.status).toBe(201);
+    const arleAct = (await arleActRes.json()) as any;
+    expect(arleAct.origin).toBe('arle_initiated');
+    expect(arleAct.progress).toBe(0.35);
+
+    // 2. Create User-assigned activity
+    const userActRes = await fetch(`http://127.0.0.1:${serverPort}/api/activities`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Draft Project Roadmap',
+        objective: 'Outline milestones for autonomous environment control.',
+        origin: 'user_assigned',
+        status: 'planned',
+        progress: 0.0,
+      }),
+    });
+    expect(userActRes.status).toBe(201);
+    const userAct = (await userActRes.json()) as any;
+    expect(userAct.origin).toBe('user_assigned');
+
+    // 3. Filter by origin
+    const listArleOnly = await fetch(`http://127.0.0.1:${serverPort}/api/activities?origin=arle_initiated`);
+    expect(listArleOnly.status).toBe(200);
+    const arleOnly = (await listArleOnly.json()) as any[];
+    expect(arleOnly.some((a) => a.id === arleAct.id)).toBe(true);
+    expect(arleOnly.some((a) => a.id === userAct.id)).toBe(false);
+
+    // 4. Update activity progress and completion
+    const patchRes = await fetch(`http://127.0.0.1:${serverPort}/api/activities/${arleAct.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        progress: 1.0,
+        status: 'completed',
+      }),
+    });
+    expect(patchRes.status).toBe(200);
+    const patched = (await patchRes.json()) as any;
+    expect(patched.status).toBe('completed');
+    expect(patched.progress).toBe(1.0);
+  });
+
+  it('provides real device telemetry and manages user preferences', async () => {
+    // 1. Device Telemetry
+    const telemRes = await fetch(`http://127.0.0.1:${serverPort}/api/telemetry`);
+    expect(telemRes.status).toBe(200);
+    const telemetry = (await telemRes.json()) as any;
+    expect(telemetry.cpu).toBeDefined();
+    expect(telemetry.memory).toBeDefined();
+    expect(telemetry.gpu).toBeDefined();
+    expect(telemetry.services).toBeDefined();
+
+    // 2. App Preferences (e.g. voice toggle)
+    const setPrefRes = await fetch(`http://127.0.0.1:${serverPort}/api/preferences`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: 'voice_output_enabled',
+        value: 'true',
+      }),
+    });
+    expect(setPrefRes.status).toBe(200);
+
+    const getPrefRes = await fetch(`http://127.0.0.1:${serverPort}/api/preferences`);
+    expect(getPrefRes.status).toBe(200);
+    const prefs = (await getPrefRes.json()) as Record<string, string>;
+    expect(prefs['voice_output_enabled']).toBe('true');
+  });
 });
