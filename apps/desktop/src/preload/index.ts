@@ -19,6 +19,12 @@ import {
   UpdateActivityInput,
   UpdateMemoryInput,
   VisionInspectResult,
+  ApeAppraisal,
+  ApeHistoryResponse,
+  ApePsychologicalState,
+  ApeRelationshipConfig,
+  EmotionTaxonomyItem,
+  MoodTaxonomyItem,
 } from '@arletex/contracts';
 
 export interface ArletexApi {
@@ -61,6 +67,14 @@ export interface ArletexApi {
     leadPaddingMs?: number,
   ) => Promise<IPCResponse<{ audioBase64: string | null }>>;
   inspectVision: (imageBase64: string, mimeType?: string, prompt?: string) => Promise<IPCResponse<VisionInspectResult>>;
+
+  // APE (Artificial Psychology Engine)
+  getApeState: () => Promise<IPCResponse<ApePsychologicalState>>;
+  getApeHistory: () => Promise<IPCResponse<ApeHistoryResponse>>;
+  getApeTaxonomy: () => Promise<IPCResponse<{ emotions: EmotionTaxonomyItem[]; moods: MoodTaxonomyItem[] }>>;
+  processApeEvent: (event: any) => Promise<IPCResponse<{ state: ApePsychologicalState; appraisal?: ApeAppraisal }>>;
+  getApeRelationship: () => Promise<IPCResponse<ApeRelationshipConfig>>;
+  updateApeRelationship: (config: Partial<ApeRelationshipConfig>) => Promise<IPCResponse<ApeRelationshipConfig>>;
 }
 
 const api: ArletexApi = {
@@ -105,6 +119,14 @@ const api: ArletexApi = {
     ipcRenderer.invoke(IPC_CHANNELS.VOICE_SYNTHESIZE, { text, voice, tone, leadPaddingMs }),
   inspectVision: (imageBase64, mimeType, prompt) =>
     ipcRenderer.invoke(IPC_CHANNELS.VISION_INSPECT, { imageBase64, mimeType, prompt }),
+
+  // APE (Artificial Psychology Engine)
+  getApeState: () => ipcRenderer.invoke(IPC_CHANNELS.APE_STATE_GET),
+  getApeHistory: () => ipcRenderer.invoke(IPC_CHANNELS.APE_HISTORY_GET),
+  getApeTaxonomy: () => ipcRenderer.invoke(IPC_CHANNELS.APE_TAXONOMY_GET),
+  processApeEvent: (event) => ipcRenderer.invoke(IPC_CHANNELS.APE_EVENT_PROCESS, event),
+  getApeRelationship: () => ipcRenderer.invoke(IPC_CHANNELS.APE_RELATIONSHIP_GET),
+  updateApeRelationship: (config) => ipcRenderer.invoke(IPC_CHANNELS.APE_RELATIONSHIP_UPDATE, config),
 };
 
 contextBridge.exposeInMainWorld('arletexApi', api);

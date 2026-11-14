@@ -25,7 +25,7 @@ declare global {
 
 export const App: React.FC = () => {
   // Navigation & UI Layout State
-  const [activeSection, setActiveSection] = useState<NavSection>('main');
+  const [activeSection, setActiveSection] = useState<NavSection>('emo');
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [telemetryCollapsed, setTelemetryCollapsed] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);

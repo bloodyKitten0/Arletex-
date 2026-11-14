@@ -418,6 +418,31 @@ function registerIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.VISION_INSPECT, async (_, input) => {
     return callBackend('/api/vision/inspect', 'POST', input);
   });
+
+  // APE (Artificial Psychology Engine)
+  ipcMain.handle(IPC_CHANNELS.APE_STATE_GET, async () => {
+    return callBackend('/api/ape/state');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.APE_HISTORY_GET, async () => {
+    return callBackend('/api/ape/history');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.APE_TAXONOMY_GET, async () => {
+    return callBackend('/api/ape/taxonomy');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.APE_EVENT_PROCESS, async (_, event) => {
+    return callBackend('/api/ape/events', 'POST', event);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.APE_RELATIONSHIP_GET, async () => {
+    return callBackend('/api/ape/relationship');
+  });
+
+  ipcMain.handle(IPC_CHANNELS.APE_RELATIONSHIP_UPDATE, async (_, config) => {
+    return callBackend('/api/ape/relationship', 'PATCH', config);
+  });
 }
 
 app.whenReady().then(async () => {

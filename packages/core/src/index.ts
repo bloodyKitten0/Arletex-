@@ -3,3 +3,7 @@ export * from './logger.js';
 export * from './events.js';
 export * from './config.js';
 export * from './persona.js';
+export * from './ape/interfaces.js';
+export * from './ape/appraisalEngine.js';
+export * from './ape/affectiveTransitionEngine.js';
+export * from './ape/apeService.js';

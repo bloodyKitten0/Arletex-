@@ -43,6 +43,14 @@ export const IPC_CHANNELS = {
   PREFERENCES_GET: 'arletex:preferences:get',
   PREFERENCES_SET: 'arletex:preferences:set',
   VISION_INSPECT: 'arletex:vision:inspect',
+
+  // APE (Artificial Psychology Engine) Channels
+  APE_STATE_GET: 'arletex:ape:state:get',
+  APE_EVENT_PROCESS: 'arletex:ape:event:process',
+  APE_HISTORY_GET: 'arletex:ape:history:get',
+  APE_TAXONOMY_GET: 'arletex:ape:taxonomy:get',
+  APE_RELATIONSHIP_GET: 'arletex:ape:relationship:get',
+  APE_RELATIONSHIP_UPDATE: 'arletex:ape:relationship:update',
 } as const;
 
 export type IPCChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -483,3 +491,9 @@ export type AuditEvent = z.infer<typeof AuditEventSchema>;
 export type IPCResponse<T> =
   | { success: true; data: T }
   | { success: false; error: string; code?: string };
+
+// ==========================================
+// APE (Artificial Psychology Engine) Exports
+// ==========================================
+export * from './ape.js';
+export * from './apeTaxonomyData.js';
